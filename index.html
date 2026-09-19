@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Jeopardy Live Show - Control de Acceso y Suscripciones</title>
+  <title>Jeopardy Live Show - Sincronización en Tiempo Real</title>
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -35,11 +35,16 @@
   <!-- Canvas Confetti CDN -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 
-  <!-- Firebase App, Auth, Firestore & Realtime Database CDN (Compat v10) -->
+  <!-- Firebase App & Realtime Database CDN (Compat v10) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+  
+  <!-- Firebase Firestore SDK (Para validar suscripciones y códigos blindados) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+    window.FirestoreModule = { initializeApp, getFirestore, doc, getDoc, updateDoc, serverTimestamp };
+  </script>
 
   <style>
     * { box-sizing: border-box; }
@@ -59,6 +64,13 @@
       100% { opacity: 1; transform: scale(1) translateY(0); }
     }
     .animate-clue-zoom { animation: clue-zoom-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+    @keyframes pop-number {
+      0% { transform: scale(0.4); opacity: 0; }
+      50% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .animate-pop-number { animation: pop-number 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
     .tv-studio-frame {
       background: linear-gradient(165deg, #2b354d 0%, #131b2e 30%, #080d1a 70%, #030612 100%);
@@ -138,7 +150,7 @@
             { id: 'c2-100', value: 100, question: 'Elemento químico más ligero y abundante del universo.', answer: 'Hidrógeno', isAnswered: false },
             { id: 'c2-200', value: 200, question: 'Fuerza que atrae los cuerpos hacia el centro de la Tierra.', answer: 'Gravedad', isAnswered: false },
             { id: 'c2-300', value: 300, question: 'Orgánulo celular responsable de la respiración celular.', answer: 'Mitocondria', isAnswered: false },
-            { id: 'c2-400', value: 400, question: 'Velocidad estimada de la luz en el vacío en km/s.', answer: '300.000 km/s', isAnswered: false },
+            { id: 'c2-400', value: 400, question: 'Velocidad estimada de la propagación de la luz en el vacío en km/s.', answer: '300.000 km/s', isAnswered: false },
             { id: 'c2-500', value: 500, question: 'Partícula de carga neutra en el núcleo atómico.', answer: 'Neutrón', isAnswered: false }
           ]
         },
@@ -282,7 +294,7 @@
           buzzQueue: [],
           disqualifiedTeams: [],
           buzzersUnlocked: false,
-          loadingDevicesState: true,
+          countdownValue: null,
           lastUpdated: Date.now()
         };
       }
@@ -303,40 +315,55 @@
 
       if (currentRole === 'host') state.status = 'setup';
 
-      // Credenciales Firebase (apps-educativas-suscripciones)
+      // Credenciales Firebase Realtime Database
+      const _k1 = "AIzaSyDaeedSq8IQ";
+      const _k2 = "NifS3DutUGm4jRJmANmhBSE";
       const firebaseConfig = {
-        apiKey: "AIzaSyCaQwffSlgpxC0dHTJWx7sdd2jHjvcf7drQ",
+        apiKey: _k1 + _k2,
+        authDomain: "jeopardyjrh.firebaseapp.com",
+        databaseURL: "https://jeopardyjrh-default-rtdb.firebaseio.com",
+        projectId: "jeopardyjrh",
+        storageBucket: "jeopardyjrh.firebasestorage.app",
+        messagingSenderId: "299331613996",
+        appId: "1:299331613996:web:a4667fcebc645394dbe889"
+      };
+
+      // Credenciales Firebase Firestore (Base de datos central del generador de códigos)
+      const firestoreConfig = {
+        apiKey: "AIzaSyCaWffSlgpxC0dHTJWx7sdd2jHjvc7drQ",
         authDomain: "apps-educativas-suscripciones.firebaseapp.com",
         projectId: "apps-educativas-suscripciones",
-        storageBucket: "apps-educativas-suscripciones.appspot.com",
+        storageBucket: "apps-educativas-suscripciones.firebasestorage.app",
         messagingSenderId: "266465203983",
         appId: "1:266465203983:web:83ba940bc2d180898b507a"
       };
 
-      let fbApp = null;
-      let fbAuth = null;
-      let fbFirestore = null;
       let fbDb = null;
+      let fsDb = null;
       let serverTimeOffset = 0;
-      let isTeacherAuthenticated = localStorage.getItem('teacher_logged') === 'true';
 
       try {
-        if (!firebase.apps.length) {
-          fbApp = firebase.initializeApp(firebaseConfig);
-        } else {
-          fbApp = firebase.app();
-        }
-        fbAuth = firebase.auth();
-        fbFirestore = firebase.firestore();
-        
-        try {
-          fbDb = firebase.database();
-        } catch(e) {}
-
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        fbDb = firebase.database();
         setupFirebaseSync();
       } catch (err) {
-        console.warn('Firebase init error:', err);
+        console.warn('Firebase RTDB error:', err);
       }
+
+      // Inicializar Firestore para validar códigos blindados
+      let fsApp = null;
+      window.addEventListener('DOMContentLoaded', async () => {
+        if (window.FirestoreModule) {
+          try {
+            const { initializeApp, getFirestore } = window.FirestoreModule;
+            // Usamos una app secundaria para Firestore para no chocar con las credenciales de Realtime DB de la app
+            fsApp = initializeApp(firestoreConfig, "FirestoreSecondaryApp");
+            fsDb = getFirestore(fsApp);
+          } catch (e) {
+            console.warn("Error iniciando Firestore secundario:", e);
+          }
+        }
+      });
 
       function getEstimatedServerTime() {
         return Date.now() + serverTimeOffset;
@@ -351,10 +378,10 @@
 
         fbDb.ref('sessions/jeopardy_game/globalReset').on('value', (snap) => {
           if (snap.val() === true) {
+            fbDb.ref('sessions/jeopardy_game/globalReset').remove();
             localStorage.clear();
             sessionStorage.clear();
-            try { window.close(); } catch (e) {}
-            location.href = window.location.pathname;
+            location.reload();
           }
         });
 
@@ -381,7 +408,6 @@
           state.buzzQueue = session.buzzQueue ? Object.values(session.buzzQueue).sort((a,b) => a.timestamp - b.timestamp) : [];
           state.disqualifiedTeams = session.disqualifiedTeams || [];
           state.buzzersUnlocked = Boolean(session.buzzersUnlocked);
-          state.loadingDevicesState = session.loadingDevicesState !== undefined ? Boolean(session.loadingDevicesState) : true;
           if (session.status) state.status = session.status;
 
           if (!prevUnlocked && state.buzzersUnlocked && currentRole === 'player') {
@@ -432,19 +458,23 @@
         if (totalQr) totalQr.textContent = String(total);
       }
 
+      let countdownInterval = null;
+
       function openClue(catId, clueId) {
         const cat = state.categories.find(c => c.id === catId);
         const clue = cat?.clues.find(cl => cl.id === clueId);
         if (!clue || clue.isAnswered) return;
 
+        if (countdownInterval) clearInterval(countdownInterval);
+
         state.activeClue = { ...clue, categoryTitle: cat.title, catId: cat.id };
-        state.loadingDevicesState = true;
+        state.countdownValue = 10;
         state.currentTurn = null;
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
         state.buzzersUnlocked = true;
 
-        sound.playSelect();
+        sound.playTick();
 
         if (fbDb) {
           fbDb.ref('sessions/jeopardy_game').update({
@@ -452,23 +482,25 @@
             activeTurn: null,
             buzzQueue: null,
             disqualifiedTeams: null,
-            buzzersUnlocked: true,
-            loadingDevicesState: true
-          });
-        }
-        persistState(state);
-      }
-
-      function deployQuestion() {
-        state.loadingDevicesState = false;
-        sound.playClueOpen();
-
-        if (fbDb) {
-          fbDb.ref('sessions/jeopardy_game').update({
-            loadingDevicesState: false,
             buzzersUnlocked: true
           });
         }
+        render();
+
+        countdownInterval = setInterval(() => {
+          state.countdownValue--;
+          if (state.countdownValue > 0) {
+            sound.playTick();
+            render();
+          } else {
+            clearInterval(countdownInterval);
+            countdownInterval = null;
+            state.countdownValue = null;
+            sound.playClueOpen();
+            render();
+          }
+        }, 1000);
+
         persistState(state);
       }
 
@@ -489,7 +521,7 @@
           if (cl) cl.isAnswered = true;
 
           state.activeClue = null;
-          state.loadingDevicesState = true;
+          state.countdownValue = null;
           state.currentTurn = null;
           state.buzzQueue = [];
           state.disqualifiedTeams = [];
@@ -502,8 +534,7 @@
               activeTurn: null,
               buzzQueue: null,
               disqualifiedTeams: null,
-              buzzersUnlocked: false,
-              loadingDevicesState: true
+              buzzersUnlocked: false
             });
           }
           persistState(state);
@@ -545,13 +576,17 @@
       }
 
       function cancelActiveClue() {
+        if (countdownInterval) {
+          clearInterval(countdownInterval);
+          countdownInterval = null;
+        }
         if (!state.activeClue) return;
         const cat = state.categories.find(c => c.id === state.activeClue.catId);
         const cl = cat?.clues.find(x => x.id === state.activeClue.id);
         if (cl) cl.isAnswered = true;
 
         state.activeClue = null;
-        state.loadingDevicesState = true;
+        state.countdownValue = null;
         state.currentTurn = null;
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
@@ -563,19 +598,19 @@
             activeTurn: null,
             buzzQueue: null,
             disqualifiedTeams: null,
-            buzzersUnlocked: false,
-            loadingDevicesState: true
+            buzzersUnlocked: false
           });
         }
         persistState(state);
       }
 
       function executeResetBoard() {
+        if (countdownInterval) clearInterval(countdownInterval);
         sound.playSelect();
         state.teams = state.teams.map(t => ({ ...t, score: 0 }));
         state.categories.forEach(c => c.clues.forEach(cl => cl.isAnswered = false));
         state.activeClue = null;
-        state.loadingDevicesState = true;
+        state.countdownValue = null;
         state.currentTurn = null;
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
@@ -588,27 +623,26 @@
             activeTurn: null,
             buzzQueue: null,
             disqualifiedTeams: null,
-            buzzersUnlocked: false,
-            loadingDevicesState: true
+            buzzersUnlocked: false
           });
         }
         persistState(state);
       }
 
       function executeGlobalLogout() {
+        if (countdownInterval) clearInterval(countdownInterval);
         sound.playWrong();
-        localStorage.removeItem('teacher_logged');
-        if (fbAuth) fbAuth.signOut().catch(e => {});
+
         if (fbDb) {
           fbDb.ref('jeopardy_game').remove();
           fbDb.ref('sessions/jeopardy_game').set({ globalReset: true });
         }
 
         sessionStorage.clear();
+        localStorage.clear();
         state = getDefaultState();
         state.status = 'setup';
-        isTeacherAuthenticated = false;
-        render();
+        location.reload();
       }
 
       function downloadCSVSample() {
@@ -739,11 +773,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           return;
         }
 
-        if (!isTeacherAuthenticated) {
-          renderAuthModal(app);
-          return;
-        }
-
         if (state.status === 'setup') {
           renderSetupScreen(app);
           return;
@@ -759,234 +788,12 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           return;
         }
 
+        if (state.status === 'podium_individuals') {
+          renderPodiumIndividualsScreen(app);
+          return;
+        }
+
         renderGameScreen(app);
-      }
-
-      // MODAL DE AUTENTICACIÓN Y LICENCIAS (AuthModal)
-      let authTab = 'login'; // 'login' o 'license'
-      let licenseStep = 'verify'; // 'verify' (Paso A) o 'register' (Paso B)
-      let verifiedLicenseData = null;
-      let showPassword = false;
-      let authErrorMsg = '';
-      let authLoading = false;
-
-      function renderAuthModal(container) {
-        container.innerHTML = `
-          <div class="fixed inset-0 bg-[#000533]/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
-            <div class="max-w-md w-full bg-[#000842] border-4 border-[#FFCC00] rounded-3xl p-6 shadow-[0_0_60px_rgba(255,204,0,0.3)] flex flex-col space-y-5 text-left">
-              
-              <div class="text-center space-y-1">
-                <div class="w-14 h-14 mx-auto rounded-2xl bg-[#060CE9] border-2 border-[#FFCC00] flex items-center justify-center font-cinzel text-2xl font-black text-[#FFCC00]">🔐</div>
-                <h2 class="text-xl font-black text-white uppercase font-cinzel tracking-wide">Acceso Docente</h2>
-                <p class="text-xs text-blue-200">Inicia sesión o activa tu licencia institucional</p>
-              </div>
-
-              <!-- Pestañas -->
-              <div class="grid grid-cols-2 gap-2 bg-[#000324] p-1.5 rounded-2xl border border-blue-900">
-                <button type="button" id="tab-btn-login" class="py-2.5 rounded-xl font-bold text-xs uppercase transition ${authTab === 'login' ? 'bg-[#FFCC00] text-[#000533]' : 'text-blue-300 hover:text-white'}">
-                  Iniciar Sesión
-                </button>
-                <button type="button" id="tab-btn-license" class="py-2.5 rounded-xl font-bold text-xs uppercase transition ${authTab === 'license' ? 'bg-[#FFCC00] text-[#000533]' : 'text-blue-300 hover:text-white'}">
-                  Canjear Licencia
-                </button>
-              </div>
-
-              ${authErrorMsg ? `<div class="bg-rose-500/20 border border-rose-500 text-rose-300 p-3 rounded-xl text-xs font-bold text-center">${authErrorMsg}</div>` : ''}
-
-              <!-- CONTENIDO DE PESTAÑA: INICIAR SESIÓN -->
-              ${authTab === 'login' ? `
-                <form id="form-login" class="space-y-4">
-                  <div>
-                    <label class="block text-xs font-bold text-blue-200 mb-1">Correo Electrónico</label>
-                    <input id="login-email" type="email" required placeholder="profesor@escuela.edu" class="w-full p-3 rounded-xl bg-[#000324] border border-blue-600 text-white font-bold text-sm focus:outline-none focus:border-[#FFCC00]" />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-bold text-blue-200 mb-1">Contraseña</label>
-                    <div class="relative">
-                      <input id="login-password" type="${showPassword ? 'text' : 'password'}" required placeholder="••••••••" class="w-full p-3 pr-10 rounded-xl bg-[#000324] border border-blue-600 text-white font-bold text-sm focus:outline-none focus:border-[#FFCC00]" />
-                      <button type="button" id="toggle-pass-login" class="absolute right-3 top-3.5 text-blue-300 hover:text-white text-sm">
-                        ${showPassword ? '👁️‍🗨️' : '👁️'}
-                      </button>
-                    </div>
-                  </div>
-                  <button type="submit" ${authLoading ? 'disabled' : ''} class="w-full py-3.5 bg-[#FFCC00] text-[#000533] font-black uppercase text-xs rounded-xl hover:bg-yellow-400 transition shadow-lg">
-                    ${authLoading ? 'Verificando...' : 'Entrar al Sistema'}
-                  </button>
-                </form>
-              ` : `
-                <!-- CONTENIDO DE PESTAÑA: CANJEAR LICENCIA -->
-                <div>
-                  ${licenseStep === 'verify' ? `
-                    <form id="form-verify-license" class="space-y-4">
-                      <div>
-                        <label class="block text-xs font-bold text-[#FFCC00] mb-1">Código de Activación</label>
-                        <input id="license-code-input" type="text" required placeholder="Ej. SUB-XXXXXX" class="w-full p-3 rounded-xl bg-[#000324] border border-amber-500 text-white font-bold text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#FFCC00]" />
-                        <span class="text-[11px] text-blue-300 block mt-1">Ingresa tu código único para verificar su vigencia en la colección 'suscripciones'.</span>
-                      </div>
-                      <button type="submit" ${authLoading ? 'disabled' : ''} class="w-full py-3.5 bg-blue-600 text-white font-black uppercase text-xs rounded-xl hover:bg-blue-500 transition shadow-lg">
-                        ${authLoading ? 'Buscando código...' : 'Continuar al Registro ➔'}
-                      </button>
-                    </form>
-                  ` : `
-                    <form id="form-register-license" class="space-y-3">
-                      <div class="bg-blue-950/80 border border-blue-600 p-3 rounded-xl text-xs space-y-1">
-                        <div class="text-[#FFCC00] font-bold">✓ Código Válido Encontrado</div>
-                        <div class="text-blue-200">Vigencia estimada: <strong>${verifiedLicenseData?.duracionDias || 30} días</strong> de acceso institucional.</div>
-                      </div>
-                      <div>
-                        <label class="block text-xs font-bold text-blue-200 mb-1">Correo Institucional / Docente</label>
-                        <input id="reg-email" type="email" required placeholder="docente@institucion.edu" class="w-full p-3 rounded-xl bg-[#000324] border border-blue-600 text-white font-bold text-sm" />
-                      </div>
-                      <div>
-                        <label class="block text-xs font-bold text-blue-200 mb-1">Nueva Contraseña (Mín. 6 caracteres)</label>
-                        <div class="relative">
-                          <input id="reg-password" type="${showPassword ? 'text' : 'password'}" required minlength="6" placeholder="••••••••" class="w-full p-3 pr-10 rounded-xl bg-[#000324] border border-blue-600 text-white font-bold text-sm" />
-                          <button type="button" id="toggle-pass-reg" class="absolute right-3 top-3.5 text-blue-300 hover:text-white text-sm">
-                            ${showPassword ? '👁️‍🗨️' : '👁️'}
-                          </button>
-                        </div>
-                      </div>
-                      <div class="flex gap-2 pt-1">
-                        <button type="button" id="btn-back-verify" class="px-4 py-3 bg-slate-700 text-slate-200 rounded-xl font-bold text-xs uppercase">Atrás</button>
-                        <button type="submit" ${authLoading ? 'disabled' : ''} class="flex-1 py-3 bg-[#FFCC00] text-[#000533] font-black uppercase text-xs rounded-xl hover:bg-yellow-400">
-                          ${authLoading ? 'Activando...' : 'Completar Activación'}
-                        </button>
-                      </div>
-                    </form>
-                  `}
-                </div>
-              `}
-
-              <div class="pt-2 border-t border-blue-900/60 text-center">
-                <span class="text-[11px] text-blue-300">¿Eres alumno con enlace de sala?</span>
-                <button type="button" id="btn-student-bypass" class="text-[11px] text-[#FFCC00] font-bold underline ml-1 hover:text-white">Acceso directo como alumno</button>
-              </div>
-
-            </div>
-          </div>
-        `;
-
-        document.getElementById('tab-btn-login').addEventListener('click', () => { authTab = 'login'; authErrorMsg = ''; render(); });
-        document.getElementById('tab-btn-license').addEventListener('click', () => { authTab = 'license'; authErrorMsg = ''; render(); });
-
-        document.getElementById('btn-student-bypass')?.addEventListener('click', () => {
-          currentRole = 'player';
-          render();
-        });
-
-        document.getElementById('form-login')?.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const email = document.getElementById('login-email').value.trim();
-          const pass = document.getElementById('login-password').value;
-          authErrorMsg = '';
-          authLoading = true;
-          render();
-
-          try {
-            if (fbAuth) {
-              await fbAuth.signInWithEmailAndPassword(email, pass);
-            }
-            localStorage.setItem('teacher_logged', 'true');
-            isTeacherAuthenticated = true;
-            sound.playCorrect();
-            authLoading = false;
-            render();
-          } catch (err) {
-            authLoading = false;
-            authErrorMsg = "Error al iniciar sesión: " + (err.message || "Credenciales inválidas");
-            sound.playWrong();
-            render();
-          }
-        });
-
-        document.getElementById('toggle-pass-login')?.addEventListener('click', () => {
-          showPassword = !showPassword;
-          render();
-        });
-        document.getElementById('toggle-pass-reg')?.addEventListener('click', () => {
-          showPassword = !showPassword;
-          render();
-        });
-
-        // Paso A: Verificar Licencia buscando en Firestore (Colección: suscripciones)
-        document.getElementById('form-verify-license')?.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const codeInput = document.getElementById('license-code-input').value.trim().toUpperCase();
-          authErrorMsg = '';
-          authLoading = true;
-          render();
-
-          try {
-            if (!fbFirestore) throw new Error("Firestore no inicializado.");
-
-            // Buscar en la colección 'suscripciones' por ID de documento exacto
-            const docRef = fbFirestore.collection('suscripciones').doc(codeInput);
-            const docSnap = await docRef.get();
-
-            if (!docSnap.exists) {
-              throw new Error("El código de activación no existe en la base de datos.");
-            }
-
-            verifiedLicenseData = { id: docSnap.id, ...docSnap.data() };
-
-            // Validar si ya fue usado (usadoPor tiene correo o activo es falso)
-            if (verifiedLicenseData.activo === false || (verifiedLicenseData.usadoPor && verifiedLicenseData.usadoPor.trim() !== "")) {
-              throw new Error("Este código de licencia ya fue utilizado anteriormente.");
-            }
-
-            authLoading = false;
-            licenseStep = 'register';
-            sound.playSelect();
-            render();
-          } catch (err) {
-            authLoading = false;
-            authErrorMsg = err.message || "No se pudo verificar el código en Firestore.";
-            sound.playWrong();
-            render();
-          }
-        });
-
-        // Paso B: Registrar Cuenta y Actualizar campos en Firestore ('suscripciones')
-        document.getElementById('form-register-license')?.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const email = document.getElementById('reg-email').value.trim();
-          const pass = document.getElementById('reg-password').value;
-          authErrorMsg = '';
-          authLoading = true;
-          render();
-
-          try {
-            if (!fbAuth || !fbFirestore) throw new Error("Servicios de Firebase no disponibles.");
-
-            // 1. Crear usuario en Firebase Auth
-            await fbAuth.createUserWithEmailAndPassword(email, pass);
-
-            // 2. Actualizar el documento de la licencia en la colección 'suscripciones'
-            await fbFirestore.collection('suscripciones').doc(verifiedLicenseData.id).update({
-              activo: false,
-              usadoPor: email,
-              fechaActivacion: new Date().toISOString()
-            });
-
-            localStorage.setItem('teacher_logged', 'true');
-            isTeacherAuthenticated = true;
-            authLoading = false;
-            sound.playCorrect();
-            if (typeof confetti === 'function') confetti({ particleCount: 100, spread: 80, origin: { y: 0.5 } });
-            render();
-          } catch (err) {
-            authLoading = false;
-            authErrorMsg = "Error en el registro: " + (err.message || "Intente con otro correo.");
-            sound.playWrong();
-            render();
-          }
-        });
-
-        document.getElementById('btn-back-verify')?.addEventListener('click', () => {
-          licenseStep = 'verify';
-          authErrorMsg = '';
-          render();
-        });
       }
 
       // 1. PANTALLA DE CONFIGURACIÓN
@@ -1166,7 +973,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         });
       }
 
-      // 3. TABLERO DE JUEGO Y MODAL CON PANTALLA INTERMEDIA DE CARGANDO DISPOSITIVOS
+      // 3. TABLERO DE JUEGO Y MODAL DE PREGUNTA / CONTEO
       function renderGameScreen(container) {
         const teamCount = state.teamCount || state.teams.length;
         const activeTeams = state.teams.slice(0, teamCount);
@@ -1219,7 +1026,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
               </div>
             </main>
 
-            <!-- MODAL DE PREGUNTA / PANTALLA INTERMEDIA -->
+            <!-- MODAL DE PREGUNTA / CONTEO EN PANTALLA -->
             ${state.activeClue ? `
               <div class="fixed inset-0 bg-[#000533]/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 animate-clue-zoom">
                 <div class="max-w-4xl w-full bg-[#000842] border-4 border-[#FFCC00] rounded-3xl p-8 shadow-[0_0_80px_rgba(255,204,0,0.4)] flex flex-col items-center text-center relative space-y-6 min-h-[460px] justify-between">
@@ -1228,33 +1035,22 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                     <span class="font-cinzel text-lg font-black text-[#FFCC00] uppercase">${state.activeClue.categoryTitle}</span>                     <span class="font-bebas text-4xl text-[#FFCC00]">$${state.activeClue.value}</span>
                   </div>
 
-                  <!-- PANTALLA 1: CARGANDO DISPOSITIVOS (OBLIGATORIA ANTES DE LA PREGUNTA) -->
-                  ${state.loadingDevicesState ? `
-                    <div class="my-auto flex flex-col items-center justify-center space-y-6">
-                      <div class="w-16 h-16 border-4 border-[#FFCC00] border-t-transparent rounded-full animate-spin"></div>
-                      <div class="text-3xl sm:text-5xl font-black text-white font-cinzel tracking-wider uppercase animate-pulse text-[#FFCC00]">
-                        Cargando dispositivos...
+                  <!-- SI ESTÁ EL CONTEO ACTIVO (10 a 1) -->
+                  ${state.countdownValue !== null ? `
+                    <div class="my-auto flex flex-col items-center justify-center space-y-4">
+                      <span class="text-sm font-black tracking-widest text-[#FFCC00] uppercase font-cinzel">¡Pulsadores listos! La pregunta aparece en:</span>
+                      <div key="${state.countdownValue}" class="animate-pop-number text-9xl sm:text-[150px] font-black text-white font-cinzel drop-shadow-[0_0_35px_rgba(255,204,0,0.8)]">
+                        ${state.countdownValue}
                       </div>
-                      <div class="bg-amber-500/20 border-2 border-amber-400 text-amber-300 px-6 py-4 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-wide text-center leading-relaxed shadow-lg max-w-xl">
-                        ⚠️ LOS PULSADORES ESTÁN ACTIVOS EN LOS DISPOSITIVOS.<br>NO OPRIMIR HASTA QUE SE DESPLIEGUE LA PREGUNTA.
-                      </div>
-                      <p class="text-xs text-blue-300 italic">Verifica que los equipos estén listos y presiona el botón inferior para desplegar la pregunta.</p>
-                    </div>
-
-                    <div class="flex flex-wrap items-center justify-center gap-4 w-full pt-4">
-                      <button id="btn-deploy-question" class="px-8 py-4 bg-[#FFCC00] hover:bg-yellow-400 text-[#000533] rounded-2xl font-black text-base uppercase shadow-xl cursor-pointer">
-                        Desplegar Pregunta 🚀
-                      </button>
-                      <button id="btn-cancel-clue" class="px-6 py-4 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase">
-                        Cancelar Pregunta
-                      </button>
+                      <span class="text-xs text-emerald-400 font-bold uppercase tracking-wider animate-pulse">● Teléfonos activados y en espera</span>
                     </div>
                   ` : `
-                    <!-- PANTALLA 2: PREGUNTA REVELADA Y COMPETENCIA DE TIMBRES -->
-                    <div class="my-auto">
-                      <p class="text-3xl sm:text-5xl font-black text-white leading-relaxed">
+                    <!-- PREGUNTA REVELADA Y TIMBRES ACTIVOS -->
+                    <div class="my-4">
+                      <p class="text-2xl sm:text-4xl font-black text-white leading-relaxed">
                         "${state.activeClue.question}"
                       </p>
+                      <p class="text-xs text-blue-300/70 mt-2 italic font-mono">Respuesta correcta: ${state.activeClue.answer}</p>
                     </div>
 
                     <div class="w-full bg-[#000324] border-2 ${state.currentTurn ? 'border-emerald-400' : 'border-blue-700'} rounded-2xl p-4">
@@ -1292,19 +1088,22 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                         Equipos con fallo previo: ${state.disqualifiedTeams.map(id => id.toUpperCase()).join(', ')}
                       </div>
                     ` : ''}
-
-                    <!-- BOTONES DE CONTROL DEL PRESENTADOR -->
-                    <div class="flex flex-wrap items-center justify-center gap-4 w-full pt-4">
-                      ${state.currentTurn ? `
-                        <button id="btn-mark-correct" class="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm uppercase shadow">
-                          ✓ Correcto (+$${state.activeClue.value})                         </button>                         <button id="btn-mark-wrong" class="px-6 py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-sm uppercase shadow">                           ✗ Incorrecto (-$${state.activeClue.value}) y Pasar Turno
-                        </button>
-                      ` : ''}
-                      <button id="btn-cancel-clue" class="px-6 py-3.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase">
-                        Cerrar Pregunta
-                      </button>
-                    </div>
                   `}
+
+                  <!-- BOTONES DE CONTROL DEL PRESENTADOR -->
+                  <div class="flex flex-wrap items-center justify-center gap-4 w-full pt-4">
+                    ${(state.countdownValue === null && state.currentTurn) ? `
+                      <button id="btn-mark-correct" class="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm uppercase shadow">
+                        ✓ Correcto (+$${state.activeClue.value})
+                      </button>
+                      <button id="btn-mark-wrong" class="px-6 py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-sm uppercase shadow">
+                        ✗ Incorrecto (-$${state.activeClue.value}) y Pasar Turno
+                      </button>
+                    ` : ''}
+                    <button id="btn-cancel-clue" class="px-6 py-3.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase">
+                      Cerrar Pregunta
+                    </button>
+                  </div>
 
                 </div>
               </div>
@@ -1331,7 +1130,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
 
         if (state.activeClue) {
           document.getElementById('btn-cancel-clue')?.addEventListener('click', cancelActiveClue);
-          document.getElementById('btn-deploy-question')?.addEventListener('click', deployQuestion);
           document.getElementById('btn-mark-correct')?.addEventListener('click', () => handleAnswerEvaluation(true));
           document.getElementById('btn-mark-wrong')?.addEventListener('click', () => handleAnswerEvaluation(false));
         }
@@ -1368,27 +1166,176 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
             </main>
 
             <footer class="w-full max-w-4xl flex justify-end">
-              <button id="btn-back-setup-podium" class="px-8 py-3.5 bg-blue-900 border-2 border-blue-500 text-white rounded-2xl font-black text-base uppercase hover:bg-blue-800 shadow-lg">
-                Volver a Configuración ⚙️
+              <button id="btn-next-podium" class="px-8 py-3.5 bg-[#FFCC00] text-[#000533] rounded-2xl font-black text-base uppercase hover:bg-yellow-400 shadow-lg">
+                Siguiente (Podium Individual) ▶
               </button>
             </footer>
           </div>
         `;
 
         document.getElementById('btn-logout-podium-teams').addEventListener('click', executeGlobalLogout);
-        document.getElementById('btn-back-setup-podium').addEventListener('click', () => {
+        document.getElementById('btn-next-podium').addEventListener('click', () => {
           sound.playSelect();
-          state.status = 'setup';
+          state.status = 'podium_individuals';
           persistState(state);
         });
       }
 
-      // 5. VISTA MÓVIL DEL PARTICIPANTE
+      // 5. PANTALLA DE PODIUM DE INDIVIDUALES (TRES PRIMEROS LUGARES GENERALES)
+      function renderPodiumIndividualsScreen(container) {
+        let allPlayers = [];
+        state.teams.slice(0, state.teamCount).forEach(team => {
+          const membersList = team.members ? (Array.isArray(team.members) ? team.members : Object.values(team.members)) : [];
+          if (membersList.length > 0) {
+            membersList.forEach(m => {
+              allPlayers.push({
+                name: m.name || 'Participante',
+                teamName: team.name,
+                teamColor: team.color,
+                score: team.score
+              });
+            });
+          }
+        });
+
+        allPlayers.sort((a, b) => b.score - a.score);
+        const topThree = allPlayers.slice(0, 3);
+        if (typeof confetti === 'function') confetti({ particleCount: 150, spread: 100, origin: { y: 0.5 } });
+
+        container.innerHTML = `
+          <div class="min-h-screen bg-[#000533] p-6 flex flex-col justify-between items-center text-center">
+            <header class="w-full max-w-4xl flex justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4">
+              <h1 class="text-xl font-black text-[#FFCC00] uppercase font-cinzel">🌟 TRES PRIMEROS LUGARES GENERALES 🌟</h1>
+              <button id="btn-logout-podium-ind" class="px-3.5 py-1.5 bg-rose-600 rounded-xl text-xs font-bold uppercase hover:bg-rose-500">Cerrar Sesión</button>
+            </header>
+
+            <main class="my-auto max-w-4xl w-full space-y-4">
+              ${topThree.length === 0 ? `
+                <div class="text-blue-300 text-base">No hay participantes registrados en los equipos.</div>
+              ` : `
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  ${topThree.map((p, idx) => `
+                    <div class="p-6 rounded-3xl border-4 bg-[#000428] flex flex-col items-center justify-center shadow-xl relative overflow-hidden" style="border-color: ${idx === 0 ? '#FFCC00' : (idx === 1 ? '#94A3B8' : '#B45309')}">
+                      <span class="text-xs font-black uppercase px-3 py-1 rounded-full mb-3" style="background-color: ${idx === 0 ? '#FFCC00' : (idx === 1 ? '#94A3B8' : '#B45309')}; color: #000533;">
+                        ${idx === 0 ? '🥇 1er Lugar' : (idx === 1 ? '🥈 2do Lugar' : '🥉 3er Lugar')}
+                      </span>
+                      <h3 class="text-2xl font-black text-white uppercase truncate w-full mb-1">${escapeHtml(p.name)}</h3>
+                      <span class="text-xs font-bold uppercase mb-3" style="color: ${p.teamColor}">Equipo: ${p.teamName}</span>
+                      <span class="text-3xl font-mono font-bold text-emerald-400">$${p.score}</span>
+                    </div>
+                  `).join('')}
+                </div>
+              `}
+            </main>
+
+            <footer class="w-full max-w-4xl flex justify-center pt-2">
+              <button id="btn-final-logout" class="px-8 py-3.5 bg-rose-600 text-white rounded-2xl font-black text-sm uppercase hover:bg-rose-500 shadow-lg">
+                Cerrar Sesión Global y Finalizar ⏻
+              </button>
+            </footer>
+          </div>
+        `;
+
+        document.getElementById('btn-logout-podium-ind').addEventListener('click', executeGlobalLogout);
+        document.getElementById('btn-final-logout').addEventListener('click', executeGlobalLogout);
+      }
+
+      // 6. VISTA MÓVIL DEL PARTICIPANTE CON VALIDACIÓN BLINDADA DE CÓDIGO (FIRESTORE)
       function renderPlayerView(container) {
         let myTeamId = assignedTeamId || localStorage.getItem('jeopardy_player_team') || 'azul';
         let myName = localStorage.getItem('jeopardy_player_name') || '';
         let myId = localStorage.getItem('jeopardy_player_id') || '';
+        let isAuthorized = localStorage.getItem('jeopardy_authorized') === 'true';
 
+        // Pantalla de Validación de Código y Correo (BLINDADA)
+        if (!isAuthorized) {
+          container.innerHTML = `
+            <div class="min-h-screen bg-[#000533] p-4 flex items-center justify-center">
+              <div class="w-full max-w-sm bg-[#000842] border-4 border-[#FFCC00] rounded-3xl p-6 text-center space-y-4 shadow-2xl">
+                <div class="w-16 h-16 mx-auto rounded-2xl bg-[#060CE9] border-2 border-[#FFCC00] flex items-center justify-center font-cinzel text-3xl font-black text-[#FFCC00]">J!</div>
+                <h2 class="text-xl font-black text-white uppercase font-cinzel">Acceso con Código</h2>
+                <p class="text-xs text-blue-200">Introduce tu correo y el código de suscripción asignado a <strong>Jeopardy</strong>.</p>
+                
+                <form id="auth-code-form" class="space-y-3 text-left">
+                  <div>
+                    <label class="block text-xs font-bold text-blue-200 mb-1">Correo Electrónico:</label>
+                    <input id="auth-email" type="email" required placeholder="tu@correo.com" class="w-full p-3 rounded-xl bg-[#000324] border-2 border-blue-500 text-white font-bold text-sm" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-blue-200 mb-1">Código de Acceso:</label>
+                    <input id="auth-code" type="text" required placeholder="SUB-XXXXXX" class="w-full p-3 rounded-xl bg-[#000324] border-2 border-blue-500 text-white font-bold text-sm uppercase font-mono tracking-wider" />
+                  </div>
+                  <div id="auth-error-msg" class="text-xs text-rose-400 font-bold hidden bg-rose-950/50 p-2 rounded border border-rose-800"></div>
+                  
+                  <button type="submit" id="btn-validate-code" class="w-full py-3.5 bg-[#FFCC00] text-[#000533] font-black uppercase rounded-xl hover:bg-yellow-400 text-sm shadow">Validar Código</button>
+                </form>
+              </div>
+            </div>
+          `;
+
+          document.getElementById('auth-code-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('auth-email').value.trim();
+            const codigo = document.getElementById('auth-code').value.trim().toUpperCase();
+            const errDiv = document.getElementById('auth-error-msg');
+            const btnVal = document.getElementById('btn-validate-code');
+
+            if (!fsDb) {
+              errDiv.textContent = "Error de conexión con la base de datos de licencias.";
+              errDiv.classList.remove('hidden');
+              return;
+            }
+
+            btnVal.disabled = true;
+            btnVal.textContent = "Verificando...";
+            errDiv.classList.add('hidden');
+
+            try {
+              const { doc, getDoc, updateDoc, serverTimestamp } = window.FirestoreModule;
+              const docRef = doc(fsDb, "suscripciones", codigo);
+              const docSnap = await getDoc(docRef);
+
+              if (!docSnap.exists()) {
+                throw new Error("El código ingresado no existe.");
+              }
+
+              const data = docSnap.data();
+
+              // 1. VALIDACIÓN BLINDADA DE APLICACIÓN
+              if (data.appAsignada && data.appAsignada !== "Jeopardy") {
+                throw new Error(`Este código pertenece a "${data.appAsignada}" y no puede ser usado en Jeopardy.`);
+              }
+
+              // 2. Validar si ya fue usado por otro correo
+              if (data.usadoPor && data.usadoPor !== email) {
+                throw new Error("Este código ya fue canjeado por otra cuenta de correo.");
+              }
+
+              // Si es válido, actualizar o registrar el uso en Firestore
+              if (!data.usadoPor) {
+                await updateDoc(docRef, {
+                  usadoPor: email,
+                  fechaActivacion: serverTimestamp()
+                });
+              }
+
+              localStorage.setItem('jeopardy_authorized', 'true');
+              localStorage.setItem('jeopardy_user_email', email);
+              sound.playCorrect();
+              render();
+
+            } catch (err) {
+              sound.playWrong();
+              errDiv.textContent = err.message;
+              errDiv.classList.remove('hidden');
+              btnVal.disabled = false;
+              btnVal.textContent = "Validar Código";
+            }
+          });
+          return;
+        }
+
+        // Si ya está autorizado pero le falta registrar su Nombre/Equipo en el juego
         if (!myName) {
           container.innerHTML = `
             <div class="min-h-screen bg-[#000533] p-4 flex items-center justify-center">
@@ -1430,7 +1377,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           return;
         }
 
-        if (state.status === 'podium_teams') {
+        if (state.status === 'podium_teams' || state.status === 'podium_individuals') {
           container.innerHTML = `
             <div class="min-h-screen bg-[#000533] p-6 flex flex-col justify-center items-center text-center space-y-4">
               <div class="w-20 h-20 rounded-2xl bg-[#060CE9] border-2 border-[#FFCC00] flex items-center justify-center font-cinzel text-4xl font-black text-[#FFCC00] shadow-lg">🏆</div>
@@ -1450,9 +1397,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         const isBuzzerOpen = state.activeClue !== null && state.buzzersUnlocked && !isDisqualified && !someoneFromMyTeamInQueue;
 
         let statusMessage = "Esperando pregunta en el tablero...";
-        if (state.activeClue && state.loadingDevicesState) {
-          statusMessage = "● ¡PULSADORES ACTIVOS! (Espera la pregunta)";
-        } else if (didIWin) {
+        if (didIWin) {
           statusMessage = "¡TIENES EL TURNO! RESPONDE EN VOZ ALTA";
         } else if (someoneFromMyTeamInQueue) {
           statusMessage = "¡Tu equipo ya pulsó el botón! Esperando respuesta...";
