@@ -58,6 +58,13 @@
     }
     .animate-clue-zoom { animation: clue-zoom-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
+    @keyframes pop-number {
+      0% { transform: scale(0.4); opacity: 0; }
+      50% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .animate-pop-number { animation: pop-number 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
     .tv-studio-frame {
       background: linear-gradient(165deg, #2b354d 0%, #131b2e 30%, #080d1a 70%, #030612 100%);
       border: 4px solid #475569;
@@ -136,7 +143,7 @@
             { id: 'c2-100', value: 100, question: 'Elemento químico más ligero y abundante del universo.', answer: 'Hidrógeno', isAnswered: false },
             { id: 'c2-200', value: 200, question: 'Fuerza que atrae los cuerpos hacia el centro de la Tierra.', answer: 'Gravedad', isAnswered: false },
             { id: 'c2-300', value: 300, question: 'Orgánulo celular responsable de la respiración celular.', answer: 'Mitocondria', isAnswered: false },
-            { id: 'c2-400', value: 400, question: 'Velocidad estimada de la luz en el vacío en km/s.', answer: '300.000 km/s', isAnswered: false },
+            { id: 'c2-400', value: 400, question: 'Velocidad estimada de la propagación de la luz en el vacío en km/s.', answer: '300.000 km/s', isAnswered: false },
             { id: 'c2-500', value: 500, question: 'Partícula de carga neutra en el núcleo atómico.', answer: 'Neutrón', isAnswered: false }
           ]
         },
@@ -280,7 +287,6 @@
           buzzQueue: [],
           disqualifiedTeams: [],
           buzzersUnlocked: false,
-          questionReadyState: true, // true = pantalla de ¡Pulsadores Listos!, false = pregunta revelada
           lastUpdated: Date.now()
         };
       }
@@ -298,6 +304,8 @@
       const urlParams = new URLSearchParams(window.location.search);
       let assignedTeamId = urlParams.get('team') || null;
       let currentRole = (urlParams.get('role') === 'player' || assignedTeamId !== null) ? 'player' : 'host';
+
+      if (currentRole === 'host') state.status = 'setup';
 
       // Credenciales Firebase
       const _k1 = "AIzaSyDaeedSq8IQ";
@@ -366,7 +374,6 @@
           state.buzzQueue = session.buzzQueue ? Object.values(session.buzzQueue).sort((a,b) => a.timestamp - b.timestamp) : [];
           state.disqualifiedTeams = session.disqualifiedTeams || [];
           state.buzzersUnlocked = Boolean(session.buzzersUnlocked);
-          state.questionReadyState = session.questionReadyState !== undefined ? Boolean(session.questionReadyState) : true;
           if (session.status) state.status = session.status;
 
           if (!prevUnlocked && state.buzzersUnlocked && currentRole === 'player') {
@@ -423,13 +430,12 @@
         if (!clue || clue.isAnswered) return;
 
         state.activeClue = { ...clue, categoryTitle: cat.title, catId: cat.id };
-        state.questionReadyState = true; // Empieza en pantalla de "¡Pulsadores listos!"
         state.currentTurn = null;
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
-        state.buzzersUnlocked = true; // Activa los botones para que confirmen conexión
+        state.buzzersUnlocked = true;
 
-        sound.playSelect();
+        sound.playClueOpen();
 
         if (fbDb) {
           fbDb.ref('sessions/jeopardy_game').update({
@@ -437,20 +443,6 @@
             activeTurn: null,
             buzzQueue: null,
             disqualifiedTeams: null,
-            buzzersUnlocked: true,
-            questionReadyState: true
-          });
-        }
-        persistState(state);
-      }
-
-      function revealQuestionAndUnlock() {
-        state.questionReadyState = false;
-        sound.playClueOpen();
-
-        if (fbDb) {
-          fbDb.ref('sessions/jeopardy_game').update({
-            questionReadyState: false,
             buzzersUnlocked: true
           });
         }
@@ -474,7 +466,6 @@
           if (cl) cl.isAnswered = true;
 
           state.activeClue = null;
-          state.questionReadyState = true;
           state.currentTurn = null;
           state.buzzQueue = [];
           state.disqualifiedTeams = [];
@@ -487,8 +478,7 @@
               activeTurn: null,
               buzzQueue: null,
               disqualifiedTeams: null,
-              buzzersUnlocked: false,
-              questionReadyState: true
+              buzzersUnlocked: false
             });
           }
           persistState(state);
@@ -536,7 +526,6 @@
         if (cl) cl.isAnswered = true;
 
         state.activeClue = null;
-        state.questionReadyState = true;
         state.currentTurn = null;
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
@@ -548,8 +537,7 @@
             activeTurn: null,
             buzzQueue: null,
             disqualifiedTeams: null,
-            buzzersUnlocked: false,
-            questionReadyState: true
+            buzzersUnlocked: false
           });
         }
         persistState(state);
@@ -560,7 +548,6 @@
         state.teams = state.teams.map(t => ({ ...t, score: 0 }));
         state.categories.forEach(c => c.clues.forEach(cl => cl.isAnswered = false));
         state.activeClue = null;
-        state.questionReadyState = true;
         state.currentTurn = null;
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
@@ -573,8 +560,7 @@
             activeTurn: null,
             buzzQueue: null,
             disqualifiedTeams: null,
-            buzzersUnlocked: false,
-            questionReadyState: true
+            buzzersUnlocked: false
           });
         }
         persistState(state);
@@ -609,7 +595,7 @@ Ciencia,300,Orgánulo celular responsable de la respiración celular,Mitocondria
 Ciencia,400,Velocidad estimada de la luz en el vacío en km por segundo,300000 km/s
 Ciencia,500,Partícula de carga neutra en el núcleo atómico,Neutrón
 Geografía,100,Río con mayor caudal y longitud del planeta Tierra,Amazonas
-Geografía,200,País soberano con mayor superficie territorial del mundo,Rusia
+Geografía,200,País soberano con mayor superficie territorial del planeta,Rusia
 Geografía,300,Cordillera continental más larga del mundo en Sudamérica,Los Andes
 Geografía,400,Ciudad capital oficial de Australia,Canberra
 Geografía,500,Desierto no polar más árido del planeta en Chile,Atacama
@@ -918,7 +904,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         });
       }
 
-      // 3. TABLERO DE JUEGO Y MODAL DE PREGUNTA / LISTOS
+      // 3. TABLERO DE JUEGO Y MODAL DE PREGUNTA (SIN SUBTÍTULO DE RESPUESTA)
       function renderGameScreen(container) {
         const teamCount = state.teamCount || state.teams.length;
         const activeTeams = state.teams.slice(0, teamCount);
@@ -971,7 +957,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
               </div>
             </main>
 
-            <!-- MODAL DE PREGUNTA / ESTADO DE LISTOS -->
+            <!-- MODAL DE PREGUNTA -->
             ${state.activeClue ? `
               <div class="fixed inset-0 bg-[#000533]/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 animate-clue-zoom">
                 <div class="max-w-4xl w-full bg-[#000842] border-4 border-[#FFCC00] rounded-3xl p-8 shadow-[0_0_80px_rgba(255,204,0,0.4)] flex flex-col items-center text-center relative space-y-6 min-h-[460px] justify-between">
@@ -980,82 +966,63 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                     <span class="font-cinzel text-lg font-black text-[#FFCC00] uppercase">${state.activeClue.categoryTitle}</span>                     <span class="font-bebas text-4xl text-[#FFCC00]">$${state.activeClue.value}</span>
                   </div>
 
-                  <!-- PASO 1: PANTALLA DE "¡PULSADORES LISTOS!" (A ESPERA DEL INSTRUCTOR) -->
-                  ${state.questionReadyState ? `
-                    <div class="my-auto flex flex-col items-center justify-center space-y-6">
-                      <div class="text-4xl sm:text-6xl font-black text-white font-cinzel tracking-wider uppercase animate-pulse text-[#FFCC00]">
-                        ¡Pulsadores listos!
-                      </div>
-                      <div class="bg-amber-500/20 border-2 border-amber-400 text-amber-300 px-6 py-4 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-wide text-center leading-relaxed shadow-lg max-w-xl">
-                        ⚠️ NO OPRIMIR EL PULSADOR HASTA QUE SALGA DE LA PREGUNTA.<br>DE HACERLO SE DARÁ LA RESPUESTA COMO INCORRECTA.
-                      </div>
-                      <p class="text-xs text-blue-300 italic">Verifica que todos los equipos estén listos en sus dispositivos y presiona el botón inferior para revelar la pregunta.</p>
-                    </div>
+                  <!-- PREGUNTA REVELADA Y TIMBRES ACTIVOS -->
+                  <div class="my-auto">
+                    <p class="text-3xl sm:text-5xl font-black text-white leading-relaxed">
+                      "${state.activeClue.question}"
+                    </p>
+                  </div>
 
-                    <div class="flex flex-wrap items-center justify-center gap-4 w-full pt-4">
-                      <button id="btn-reveal-question" class="px-8 py-4 bg-[#FFCC00] hover:bg-yellow-400 text-[#000533] rounded-2xl font-black text-base uppercase shadow-xl">
-                        Revelar Pregunta y Habilitar Timbre 🚀
+                  <div class="w-full bg-[#000324] border-2 ${state.currentTurn ? 'border-emerald-400' : 'border-blue-700'} rounded-2xl p-4">
+                    ${state.currentTurn ? `
+                      <div class="space-y-1">
+                        <span class="text-xs uppercase tracking-widest text-emerald-400 font-black animate-pulse">¡TIENE EL TURNO PARA RESPONDER!</span>
+                        <h3 class="text-3xl font-black text-white uppercase">${state.currentTurn.playerName}</h3>
+                        <span class="text-sm font-bold uppercase" style="color: ${state.currentTurn.teamColor}">Equipo: ${state.currentTurn.teamName}</span>
+                      </div>
+                    ` : `
+                      <div class="flex items-center justify-center gap-2 text-emerald-300 font-bold text-sm">
+                        <span class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span>TIMBRES ACTIVOS: ¡Cualquiera puede pulsar ahora!</span>
+                      </div>
+                    `}
+                  </div>
+
+                  ${(state.buzzQueue && state.buzzQueue.length > 0) ? `
+                    <div class="w-full bg-[#00021A] rounded-xl p-3 border border-blue-900 text-left">
+                      <span class="text-[11px] font-black uppercase text-[#FFCC00] block mb-1 font-cinzel">Fila de espera:</span>
+                      <div class="flex flex-wrap gap-2">
+                        ${state.buzzQueue.map((item, idx) => `
+                          <div class="px-2.5 py-1 rounded bg-blue-950 border text-xs font-bold flex items-center gap-1.5" style="border-color: ${item.teamColor}">
+                            <span class="text-slate-400 font-mono">#${idx + 2}</span>
+                            <span class="text-white">${item.playerName}</span>
+                            <span class="text-[10px] uppercase font-bold" style="color: ${item.teamColor}">(${item.teamName})</span>
+                          </div>
+                        `).join('')}
+                      </div>
+                    </div>
+                  ` : ''}
+
+                  ${(state.disqualifiedTeams && state.disqualifiedTeams.length > 0) ? `
+                    <div class="text-xs text-rose-400 font-bold">
+                      Equipos con fallo previo: ${state.disqualifiedTeams.map(id => id.toUpperCase()).join(', ')}
+                    </div>
+                  ` : ''}
+
+                  <!-- BOTONES DE CONTROL DEL PRESENTADOR -->
+                  <div class="flex flex-wrap items-center justify-center gap-4 w-full pt-4">
+                    ${state.currentTurn ? `
+                      <button id="btn-mark-correct" class="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm uppercase shadow">
+                        ✓ Correcto (+$${state.activeClue.value})
                       </button>
-                      <button id="btn-cancel-clue" class="px-6 py-4 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase">
-                        Cancelar Pregunta
+                      <button id="btn-mark-wrong" class="px-6 py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-sm uppercase shadow">
+                        ✗ Incorrecto (-$${state.activeClue.value}) y Pasar Turno
                       </button>
-                    </div>
-                  ` : `
-                    <!-- PASO 2: PREGUNTA REVELADA Y TIMBRES ACTIVOS -->
-                    <div class="my-4">
-                      <p class="text-2xl sm:text-4xl font-black text-white leading-relaxed">
-                        "${state.activeClue.question}"
-                      </p>
-                    </div>
-
-                    <div class="w-full bg-[#000324] border-2 ${state.currentTurn ? 'border-emerald-400' : 'border-blue-700'} rounded-2xl p-4">
-                      ${state.currentTurn ? `
-                        <div class="space-y-1">
-                          <span class="text-xs uppercase tracking-widest text-emerald-400 font-black animate-pulse">¡TIENE EL TURNO PARA RESPONDER!</span>
-                          <h3 class="text-3xl font-black text-white uppercase">${state.currentTurn.playerName}</h3>
-                          <span class="text-sm font-bold uppercase" style="color: ${state.currentTurn.teamColor}">Equipo: ${state.currentTurn.teamName}</span>
-                        </div>
-                      ` : `
-                        <div class="flex items-center justify-center gap-2 text-emerald-300 font-bold text-sm">
-                          <span class="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
-                          <span>TIMBRES ACTIVOS: ¡Cualquiera puede pulsar ahora!</span>
-                        </div>
-                      `}
-                    </div>
-
-                    ${(state.buzzQueue && state.buzzQueue.length > 0) ? `
-                      <div class="w-full bg-[#00021A] rounded-xl p-3 border border-blue-900 text-left">
-                        <span class="text-[11px] font-black uppercase text-[#FFCC00] block mb-1 font-cinzel">Fila de espera:</span>
-                        <div class="flex flex-wrap gap-2">
-                          ${state.buzzQueue.map((item, idx) => `
-                            <div class="px-2.5 py-1 rounded bg-blue-950 border text-xs font-bold flex items-center gap-1.5" style="border-color: ${item.teamColor}">
-                              <span class="text-slate-400 font-mono">#${idx + 2}</span>
-                              <span class="text-white">${item.playerName}</span>
-                              <span class="text-[10px] uppercase font-bold" style="color: ${item.teamColor}">(${item.teamName})</span>
-                            </div>
-                          `).join('')}
-                        </div>
-                      </div>
                     ` : ''}
-
-                    ${(state.disqualifiedTeams && state.disqualifiedTeams.length > 0) ? `
-                      <div class="text-xs text-rose-400 font-bold">
-                        Equipos con fallo previo: ${state.disqualifiedTeams.map(id => id.toUpperCase()).join(', ')}
-                      </div>
-                    ` : ''}
-
-                    <!-- BOTONES DE CONTROL DEL PRESENTADOR -->
-                    <div class="flex flex-wrap items-center justify-center gap-4 w-full pt-4">
-                      ${state.currentTurn ? `
-                        <button id="btn-mark-correct" class="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm uppercase shadow">
-                          ✓ Correcto (+$${state.activeClue.value})                         </button>                         <button id="btn-mark-wrong" class="px-6 py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-sm uppercase shadow">                           ✗ Incorrecto (-$${state.activeClue.value}) y Pasar Turno
-                        </button>
-                      ` : ''}
-                      <button id="btn-cancel-clue" class="px-6 py-3.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase">
-                        Cerrar Pregunta
-                      </button>
-                    </div>
-                  `}
+                    <button id="btn-cancel-clue" class="px-6 py-3.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase">
+                      Cerrar Pregunta
+                    </button>
+                  </div>
 
                 </div>
               </div>
@@ -1082,7 +1049,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
 
         if (state.activeClue) {
           document.getElementById('btn-cancel-clue')?.addEventListener('click', cancelActiveClue);
-          document.getElementById('btn-reveal-question')?.addEventListener('click', revealQuestionAndUnlock);
           document.getElementById('btn-mark-correct')?.addEventListener('click', () => handleAnswerEvaluation(true));
           document.getElementById('btn-mark-wrong')?.addEventListener('click', () => handleAnswerEvaluation(false));
         }
@@ -1163,7 +1129,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
 
           document.getElementById('mobile-join-form').addEventListener('submit', (e) => {
             e.preventDefault();
-            const name = document.getElementById('mobile-name'].value.trim();
+            const name = document.getElementById('mobile-name').value.trim();
             if (!name) return;
             const pId = 'p-' + Date.now();
 
@@ -1198,12 +1164,10 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         const someoneFromMyTeamInQueue = (state.currentTurn?.teamId === myTeamId) || 
           (state.buzzQueue || []).some(q => q.teamId === myTeamId);
 
-        const isBuzzerOpen = state.activeClue !== null && !state.questionReadyState && state.buzzersUnlocked && !isDisqualified && !someoneFromMyTeamInQueue;
+        const isBuzzerOpen = state.activeClue !== null && state.buzzersUnlocked && !isDisqualified && !someoneFromMyTeamInQueue;
 
         let statusMessage = "Esperando pregunta en el tablero...";
-        if (state.activeClue && state.questionReadyState) {
-          statusMessage = "¡Pulsadores listos! Esperando al profesor...";
-        } else if (didIWin) {
+        if (didIWin) {
           statusMessage = "¡TIENES EL TURNO! RESPONDE EN VOZ ALTA";
         } else if (someoneFromMyTeamInQueue) {
           statusMessage = "¡Tu equipo ya pulsó el botón! Esperando respuesta...";
