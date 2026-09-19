@@ -340,6 +340,7 @@
           if (snap.val() === true) {
             localStorage.clear();
             sessionStorage.clear();
+            // Cierra la pestaña o redirige si el navegador bloquea el cierre automático
             try { window.close(); } catch (e) {}
             location.href = window.location.pathname;
           }
