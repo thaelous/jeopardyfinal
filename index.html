@@ -307,8 +307,6 @@
       let assignedTeamId = urlParams.get('team') || null;
       let currentRole = (urlParams.get('role') === 'player' || assignedTeamId !== null) ? 'player' : 'host';
 
-      if (currentRole === 'host') state.status = 'setup';
-
       // Credenciales Firebase
       const _k1 = "AIzaSyDaeedSq8IQ";
       const _k2 = "NifS3DutUGm4jRJmANmhBSE";
@@ -442,7 +440,7 @@
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
         state.falseStartPlayers = [];
-        state.buzzersUnlocked = true; // ACTIVOS DURANTE EL CONTEO
+        state.buzzersUnlocked = true; // Activos durante el conteo
 
         sound.playTick();
 
@@ -649,7 +647,7 @@ Deportes,100,País con más títulos ganados en la Copa Mundial de Fútbol,Brasi
 Deportes,200,Puntuación máxima perfecta en una partida de boliche,300 puntos
 Deportes,300,Velocista jamaiquino récord mundial en 100 y 200 metros,Usain Bolt
 Deportes,400,Torneo de tenis Grand Slam disputado sobre césped en Londres,Wimbledon
-Deportes,500,Número de jugadores in cancha por equipo en básquetbol,5 jugadores`;
+Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadores`;
 
         const blob = new Blob([sampleContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
@@ -1237,7 +1235,7 @@ Deportes,500,Número de jugadores in cancha por equipo en básquetbol,5 jugadore
       function renderPlayerView(container) {
         let myTeamId = assignedTeamId || localStorage.getItem('jeopardy_player_team') || 'azul';
         let myName = localStorage.getItem('jeopardy_player_name') || '';
-        let myId = localStorage.getItem('jeopardy_player_id'] || '';
+        let myId = localStorage.getItem('jeopardy_player_id') || '';
 
         if (!myName) {
           container.innerHTML = `
@@ -1365,7 +1363,6 @@ Deportes,500,Número de jugadores in cancha por equipo en básquetbol,5 jugadore
             const isDuringCountdown = state.countdownValue !== null;
 
             if (isDuringCountdown) {
-              // Falsa salida durante el conteo: penaliza puntos al equipo y bloquea al usuario/equipo para esta pregunta
               const clueVal = state.activeClue.value;
               if (teamObj) teamObj.score -= clueVal;
 
