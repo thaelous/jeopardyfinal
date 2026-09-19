@@ -459,7 +459,6 @@
         render();
 
         countdownInterval = setInterval(() => {
-          // Si hubo una pulsación anticipada (falsa salida), detenemos el conteo de inmediato
           if (state.falseStart) {
             clearInterval(countdownInterval);
             countdownInterval = null;
@@ -529,7 +528,6 @@
           const remainingQueue = (state.buzzQueue || []).filter(item => !disq.includes(item.teamId));
 
           if (state.falseStart) {
-            // Si fue falsa salida y el presentador evaluó, cerramos la pregunta o dejamos que pase a otros si hay en cola
             state.activeClue = null;
             state.countdownValue = null;
             state.currentTurn = null;
@@ -1047,11 +1045,14 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                   ${state.countdownValue !== null ? `
                     <div class="my-auto flex flex-col items-center justify-center space-y-4">
                       ${state.falseStart && state.currentTurn ? `
-                        <div class="w-full bg-rose-950/80 border-4 border-rose-500 rounded-2xl p-6 animate-bounce space-y-2">
+                        <div class="w-full bg-rose-950/80 border-4 border-rose-500 rounded-2xl p-6 animate-bounce space-y-3">
                           <span class="text-xs uppercase tracking-widest text-rose-300 font-black">⚠️ FALSA SALIDA DETECTADA</span>
                           <h3 class="text-4xl font-black text-white uppercase">${state.currentTurn.playerName}</h3>
-                          <span class="text-lg font-black uppercase text-rose-400 block">Se adelantó en responder, puntos incorrectos</span>
-                          <span class="text-xs text-slate-300 block uppercase" style="color: ${state.currentTurn.teamColor}">Equipo: ${state.currentTurn.teamName}</span>
+                          <div class="text-base sm:text-lg font-black text-rose-400 uppercase leading-snug space-y-1">
+                            <p>Pulsador oprimido antes de que terminara el conteo.</p>
+                            <p class="text-[#FFCC00]">Respuesta incorrecta automática</p>
+                          </div>
+                          <span class="text-xs text-slate-300 block uppercase pt-1" style="color: ${state.currentTurn.teamColor}">Equipo: ${state.currentTurn.teamName}</span>
                         </div>
                       ` : `
                         <span class="text-sm font-black tracking-widest text-[#FFCC00] uppercase font-cinzel">¡Pulsadores listos! La pregunta aparece en:</span>
@@ -1157,7 +1158,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           document.getElementById('btn-mark-correct')?.addEventListener('click', () => handleAnswerEvaluation(true));
           document.getElementById('btn-mark-wrong')?.addEventListener('click', () => handleAnswerEvaluation(false));
           document.getElementById('btn-apply-false-start')?.addEventListener('click', () => {
-            // Aplica penalización automática por falsa salida
             const clueVal = state.activeClue.value;
             const team = state.teams.find(t => t.id === state.currentTurn.teamId);
             if (team) team.score -= clueVal;
@@ -1364,7 +1364,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
 
         let statusMessage = "Esperando pregunta en el tablero...";
         if (state.falseStart && didIWin) {
-          statusMessage = "¡TE ADELANTASTE! PUNTOS INCORRECTOS";
+          statusMessage = "¡TE ADELANTASTE! RESPUESTA INCORRECTA AUTOMÁTICA";
         } else if (didIWin) {
           statusMessage = "¡TIENES EL TURNO! RESPONDE EN VOZ ALTA";
         } else if (someoneFromMyTeamInQueue) {
@@ -1424,7 +1424,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
               timestamp: accurateTimestamp
             };
 
-            // Detectar si el timbre se pulsó durante la cuenta regresiva (falsa salida)
             const isFalseStart = state.countdownValue !== null;
 
             if (isFalseStart) {
