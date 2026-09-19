@@ -329,7 +329,6 @@
         fbAuth = firebase.auth();
         fbFirestore = firebase.firestore();
         
-        // Inicializar Realtime Database auxiliar si se requiere para juego en red (opcional con misma config o URL)
         try {
           fbDb = firebase.database();
         } catch(e) {}
@@ -740,7 +739,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           return;
         }
 
-        // Si es host pero no ha iniciado sesión ni canjeado licencia, mostrar AuthModal obligatoriamente
         if (!isTeacherAuthenticated) {
           renderAuthModal(app);
           return;
@@ -823,7 +821,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                       <div>
                         <label class="block text-xs font-bold text-[#FFCC00] mb-1">Código de Activación</label>
                         <input id="license-code-input" type="text" required placeholder="Ej. SUB-XXXXXX" class="w-full p-3 rounded-xl bg-[#000324] border border-amber-500 text-white font-bold text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#FFCC00]" />
-                        <span class="text-[11px] text-blue-300 block mt-1">Ingresa tu código único para verificar su vigencia en la base de datos.</span>
+                        <span class="text-[11px] text-blue-300 block mt-1">Ingresa tu código único para verificar su vigencia en la colección 'suscripciones'.</span>
                       </div>
                       <button type="submit" ${authLoading ? 'disabled' : ''} class="w-full py-3.5 bg-blue-600 text-white font-black uppercase text-xs rounded-xl hover:bg-blue-500 transition shadow-lg">
                         ${authLoading ? 'Buscando código...' : 'Continuar al Registro ➔'}
@@ -833,7 +831,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                     <form id="form-register-license" class="space-y-3">
                       <div class="bg-blue-950/80 border border-blue-600 p-3 rounded-xl text-xs space-y-1">
                         <div class="text-[#FFCC00] font-bold">✓ Código Válido Encontrado</div>
-                        <div class="text-blue-200">Vigencia estimada: <strong>${verifiedLicenseData?.durationDays || 30} días</strong> de acceso institucional.</div>
+                        <div class="text-blue-200">Vigencia estimada: <strong>${verifiedLicenseData?.duracionDias || 30} días</strong> de acceso institucional.</div>
                       </div>
                       <div>
                         <label class="block text-xs font-bold text-blue-200 mb-1">Correo Institucional / Docente</label>
@@ -868,7 +866,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           </div>
         `;
 
-        // Event Listeners del Modal
         document.getElementById('tab-btn-login').addEventListener('click', () => { authTab = 'login'; authErrorMsg = ''; render(); });
         document.getElementById('tab-btn-license').addEventListener('click', () => { authTab = 'license'; authErrorMsg = ''; render(); });
 
@@ -877,7 +874,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           render();
         });
 
-        // Login Submit
         document.getElementById('form-login')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const email = document.getElementById('login-email').value.trim();
@@ -903,7 +899,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           }
         });
 
-        // Toggle Password Visibility
         document.getElementById('toggle-pass-login')?.addEventListener('click', () => {
           showPassword = !showPassword;
           render();
@@ -913,7 +908,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           render();
         });
 
-        // Paso A: Verificar Licencia en Firestore (Colección: licenses o subscriptions)
+        // Paso A: Verificar Licencia buscando en Firestore (Colección: suscripciones)
         document.getElementById('form-verify-license')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const codeInput = document.getElementById('license-code-input').value.trim().toUpperCase();
@@ -924,23 +919,18 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           try {
             if (!fbFirestore) throw new Error("Firestore no inicializado.");
 
-            // Buscar el documento cuyo ID o campo 'code' coincida en la colección 'licenses'
-            const docRef = fbFirestore.collection('licenses').doc(codeInput);
+            // Buscar en la colección 'suscripciones' por ID de documento exacto
+            const docRef = fbFirestore.collection('suscripciones').doc(codeInput);
             const docSnap = await docRef.get();
 
             if (!docSnap.exists) {
-              // Intentar buscar por campo 'code' si no es el ID del documento
-              const querySnap = await fbFirestore.collection('licenses').where('code', '==', codeInput).get();
-              if (querySnap.empty) {
-                throw new Error("El código de activación no existe en la base de datos.");
-              }
-              const targetDoc = querySnap.docs[0];
-              verifiedLicenseData = { id: targetDoc.id, ...targetDoc.data() };
-            } else {
-              verifiedLicenseData = { id: docSnap.id, ...docSnap.data() };
+              throw new Error("El código de activación no existe en la base de datos.");
             }
 
-            if (verifiedLicenseData.used === true || verifiedLicenseData.isUsed === true) {
+            verifiedLicenseData = { id: docSnap.id, ...docSnap.data() };
+
+            // Validar si ya fue usado (usadoPor tiene correo o activo es falso)
+            if (verifiedLicenseData.activo === false || (verifiedLicenseData.usadoPor && verifiedLicenseData.usadoPor.trim() !== "")) {
               throw new Error("Este código de licencia ya fue utilizado anteriormente.");
             }
 
@@ -956,7 +946,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           }
         });
 
-        // Paso B: Registrar Cuenta y "Quemar" Licencia
+        // Paso B: Registrar Cuenta y Actualizar campos en Firestore ('suscripciones')
         document.getElementById('form-register-license')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const email = document.getElementById('reg-email').value.trim();
@@ -971,12 +961,11 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
             // 1. Crear usuario en Firebase Auth
             await fbAuth.createUserWithEmailAndPassword(email, pass);
 
-            // 2. Marcar licencia como usada en Firestore
-            await fbFirestore.collection('licenses').doc(verifiedLicenseData.id).update({
-              used: true,
-              isUsed: true,
-              usedBy: email,
-              activatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            // 2. Actualizar el documento de la licencia en la colección 'suscripciones'
+            await fbFirestore.collection('suscripciones').doc(verifiedLicenseData.id).update({
+              activo: false,
+              usadoPor: email,
+              fechaActivacion: new Date().toISOString()
             });
 
             localStorage.setItem('teacher_logged', 'true');
