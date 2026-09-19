@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Jeopardy Live Show - Control de Acceso y Suscripciones</title>
+  <title>Jeopardy Live Show - Licenciamiento Firestore</title>
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -35,9 +35,8 @@
   <!-- Canvas Confetti CDN -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 
-  <!-- Firebase App, Auth, Firestore & Realtime Database CDN (Compat v10) -->
+  <!-- Firebase App, Firestore & Realtime Database CDN (Compat v10) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
@@ -63,11 +62,7 @@
     .tv-studio-frame {
       background: linear-gradient(165deg, #2b354d 0%, #131b2e 30%, #080d1a 70%, #030612 100%);
       border: 4px solid #475569;
-      box-shadow: 
-        0 0 0 2px #d4af37,
-        0 0 0 5px #1e293b,
-        0 25px 60px rgba(0, 0, 0, 0.9),
-        0 0 50px rgba(6, 12, 233, 0.3);
+      box-shadow: 0 0 0 2px #d4af37, 0 0 0 5px #1e293b, 0 25px 60px rgba(0, 0, 0, 0.9), 0 0 50px rgba(6, 12, 233, 0.3);
     }
 
     .buzzer-dome-red {
@@ -87,16 +82,8 @@
       cursor: not-allowed;
     }
 
-    .glossy-clue-card {
-      position: relative;
-      overflow: hidden;
-      transition: all 0.15s ease;
-    }
-    .glossy-clue-card:hover {
-      transform: scale(1.03);
-      filter: brightness(1.15);
-      box-shadow: 0 0 20px rgba(255, 204, 0, 0.6);
-    }
+    .glossy-clue-card { position: relative; overflow: hidden; transition: all 0.15s ease; }
+    .glossy-clue-card:hover { transform: scale(1.03); filter: brightness(1.15); box-shadow: 0 0 20px rgba(255, 204, 0, 0.6); }
 
     .answered-card {
       background: #02061f !important;
@@ -182,18 +169,6 @@
             if (AudioCtx) this.ctx = new AudioCtx();
           }
           if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
-        }
-        playTick() {
-          this.init(); if (!this.ctx) return;
-          const now = this.ctx.currentTime;
-          const osc = this.ctx.createOscillator();
-          const gain = this.ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(880, now);
-          gain.gain.setValueAtTime(0.2, now);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-          osc.connect(gain); gain.connect(this.ctx.destination);
-          osc.start(now); osc.stop(now + 0.09);
         }
         playSelect() {
           this.init(); if (!this.ctx) return;
@@ -303,7 +278,7 @@
 
       if (currentRole === 'host') state.status = 'setup';
 
-      // Credenciales oficiales de Firebase
+      // Credenciales de Firebase (mismas de Methaplan)
       const firebaseConfig = {
         apiKey: "AIzaSyCaWffSlgpxC0dHTJWx7sdd2jHjvcf7drQ",
         authDomain: "apps-educativas-suscripciones.firebaseapp.com",
@@ -314,11 +289,10 @@
       };
 
       let fbApp = null;
-      let fbAuth = null;
       let fbFirestore = null;
       let fbDb = null;
       let serverTimeOffset = 0;
-      let isTeacherAuthenticated = localStorage.getItem('teacher_logged') === 'true';
+      let isTeacherAuthenticated = localStorage.getItem('auth_token_jeopardy') !== null;
 
       try {
         if (!firebase.apps.length) {
@@ -326,20 +300,20 @@
         } else {
           fbApp = firebase.app();
         }
-        fbAuth = firebase.auth();
         fbFirestore = firebase.firestore();
-        
-        try {
-          fbDb = firebase.database();
-        } catch(e) {}
-
+        try { fbDb = firebase.database(); } catch(e) {}
         setupFirebaseSync();
       } catch (err) {
         console.warn('Firebase init error:', err);
       }
 
-      function getEstimatedServerTime() {
-        return Date.now() + serverTimeOffset;
+      function getOrCreateDeviceId() {
+        let devId = localStorage.getItem('jeopardy_device_id');
+        if (!devId) {
+          devId = `dev_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+          localStorage.setItem('jeopardy_device_id', devId);
+        }
+        return devId;
       }
 
       function setupFirebaseSync() {
@@ -353,7 +327,6 @@
           if (snap.val() === true) {
             localStorage.clear();
             sessionStorage.clear();
-            try { window.close(); } catch (e) {}
             location.href = window.location.pathname;
           }
         });
@@ -597,122 +570,16 @@
 
       function executeGlobalLogout() {
         sound.playWrong();
-        localStorage.removeItem('teacher_logged');
-        if (fbAuth) fbAuth.signOut().catch(e => {});
+        localStorage.removeItem('auth_token_jeopardy');
         if (fbDb) {
           fbDb.ref('jeopardy_game').remove();
           fbDb.ref('sessions/jeopardy_game').set({ globalReset: true });
         }
-
         sessionStorage.clear();
         state = getDefaultState();
         state.status = 'setup';
         isTeacherAuthenticated = false;
         render();
-      }
-
-      function downloadCSVSample() {
-        const sampleContent = 
-`Categoria,Valor,Pregunta,Respuesta
-Historia,100,Año de la llegada de Cristóbal Colón al continente americano,1492
-Historia,200,Civilización precolombina constructora de Machu Picchu,Los Incas
-Historia,300,Primer emperador de Roma tras la caída de la República,César Augusto
-Historia,400,Tratado firmado en 1919 que selló el final de la Primera Guerra Mundial,Tratado de Versalles
-Historia,500,Pensador de la Ilustración autor de la división de poderes,Montesquieu
-Ciencia,100,Elemento químico más ligero y abundante del universo,Hidrógeno
-Ciencia,200,Fuerza que atrae los cuerpos hacia el centro de la Tierra,Gravedad
-Ciencia,300,Orgánulo celular responsable de la respiración celular,Mitocondria
-Ciencia,400,Velocidad estimada de la luz en el vacío en km por segundo,300000 km/s
-Ciencia,500,Partícula de carga neutra en el núcleo atómico,Neutrón
-Geografía,100,Río con mayor caudal y longitud del planeta Tierra,Amazonas
-Geografía,200,País soberano con mayor superficie territorial del mundo,Rusia
-Geografía,300,Cordillera continental más larga del mundo en Sudamérica,Los Andes
-Geografía,400,Ciudad capital oficial de Australia,Canberra
-Geografía,500,Desierto no polar más árido del planeta en Chile,Atacama
-Cultura Pop,100,Identidad secreta del superhéroe Batman,Bruce Wayne
-Cultura Pop,200,Banda británica icónica de Liverpool integrada por cuatro músicos,The Beatles
-Cultura Pop,300,Película taquillera de James Cameron ambientada en Pandora,Avatar
-Cultura Pop,400,Criatura amarilla eléctrica y compañero de Ash Ketchum,Pikachu
-Cultura Pop,500,Autor de las novelas de El Señor de los Anillos,J.R.R. Tolkien
-Deportes,100,País con más títulos ganados en la Copa Mundial de Fútbol,Brasil
-Deportes,200,Puntuación máxima perfecta en una partida de boliche,300 puntos
-Deportes,300,Velocista jamaiquino récord mundial en 100 y 200 metros,Usain Bolt
-Deportes,400,Torneo de tenis Grand Slam disputado sobre césped en Londres,Wimbledon
-Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadores`;
-
-        const blob = new Blob([sampleContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', 'plantilla_preguntas_jeopardy.csv');
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-
-      function handleCSVUpload(file) {
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          const text = e.target.result;
-          const lines = text.split(/\r\n|\n/).filter(line => line.trim().length > 0);
-          if (lines.length < 2) {
-            alert("El archivo CSV no contiene suficientes filas.");
-            return;
-          }
-
-          const delimiter = lines[0].includes(';') ? ';' : ',';
-          const newCategoriesMap = {};
-
-          for (let i = 1; i < lines.length; i++) {
-            const parts = parseCSVLine(lines[i], delimiter);
-            if (parts.length >= 4) {
-              const catName = parts[0].trim();
-              const val = parseInt(parts[1].trim().replace(/[^0-9]/g, ''), 10) || 100;
-              const q = parts[2].trim();
-              const a = parts[3].trim();
-
-              if (!newCategoriesMap[catName]) newCategoriesMap[catName] = [];
-              newCategoriesMap[catName].push({
-                id: `c-upload-${i}`,
-                value: val,
-                question: q,
-                answer: a,
-                isAnswered: false
-              });
-            }
-          }
-
-          const catKeys = Object.keys(newCategoriesMap);
-          if (catKeys.length === 0) {
-            alert("No se pudieron extraer categorías del archivo.");
-            return;
-          }
-
-          state.categories = catKeys.slice(0, 5).map((catName, idx) => ({
-            id: `cat-up-${idx + 1}`,
-            title: catName,
-            clues: newCategoriesMap[catName].sort((a, b) => a.value - b.value).slice(0, 5)
-          }));
-
-          persistState(state);
-          sound.playCorrect();
-          alert(`¡Preguntas cargadas con éxito! ${state.categories.length} categorías registradas.`);
-        };
-        reader.readAsText(file, 'UTF-8');
-      }
-
-      function parseCSVLine(text, delimiter) {
-        const result = [];
-        let cur = '';
-        let inQuotes = false;
-        for (let i = 0; i < text.length; i++) {
-          const c = text[i];
-          if (c === '"') inQuotes = !inQuotes;
-          else if (c === delimiter && !inQuotes) { result.push(cur); cur = ''; }
-          else cur += c;
-        }
-        result.push(cur);
-        return result;
       }
 
       function persistState(newState) {
@@ -762,9 +629,9 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         renderGameScreen(app);
       }
 
-      // MODAL DE AUTENTICACIÓN Y LICENCIAS (AuthModal)
+      // ESTADO DEL MODAL DE AUTENTICACIÓN (ESTILO METHAPLAN)
       let authTab = 'login'; // 'login' o 'license'
-      let licenseStep = 'verify'; // 'verify' (Paso A) o 'register' (Paso B)
+      let licenseStep = 'verify'; // 'verify' o 'register'
       let verifiedLicenseData = null;
       let showPassword = false;
       let authErrorMsg = '';
@@ -793,7 +660,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
 
               ${authErrorMsg ? `<div class="bg-rose-500/20 border border-rose-500 text-rose-300 p-3 rounded-xl text-xs font-bold text-center">${authErrorMsg}</div>` : ''}
 
-              <!-- CONTENIDO DE PESTAÑA: INICIAR SESIÓN -->
+              <!-- INICIAR SESIÓN -->
               ${authTab === 'login' ? `
                 <form id="form-login" class="space-y-4">
                   <div>
@@ -814,14 +681,14 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                   </button>
                 </form>
               ` : `
-                <!-- CONTENIDO DE PESTAÑA: CANJEAR LICENCIA -->
+                <!-- CANJEAR LICENCIA -->
                 <div>
                   ${licenseStep === 'verify' ? `
                     <form id="form-verify-license" class="space-y-4">
                       <div>
                         <label class="block text-xs font-bold text-[#FFCC00] mb-1">Código de Activación</label>
                         <input id="license-code-input" type="text" required placeholder="Ej. SUB-XXXXXX" class="w-full p-3 rounded-xl bg-[#000324] border border-amber-500 text-white font-bold text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#FFCC00]" />
-                        <span class="text-[11px] text-blue-300 block mt-1">Ingresa tu código único para verificar su vigencia en la colección 'suscripciones'.</span>
+                        <span class="text-[11px] text-blue-300 block mt-1">Verifica tu código en la colección 'suscripciones'.</span>
                       </div>
                       <button type="submit" ${authLoading ? 'disabled' : ''} class="w-full py-3.5 bg-blue-600 text-white font-black uppercase text-xs rounded-xl hover:bg-blue-500 transition shadow-lg">
                         ${authLoading ? 'Buscando código...' : 'Continuar al Registro ➔'}
@@ -874,41 +741,55 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           render();
         });
 
+        document.getElementById('toggle-pass-login')?.addEventListener('click', () => { showPassword = !showPassword; render(); });
+        document.getElementById('toggle-pass-reg')?.addEventListener('click', () => { showPassword = !showPassword; render(); });
+
+        // INICIAR SESIÓN (Método idéntico a Methaplan)
         document.getElementById('form-login')?.addEventListener('submit', async (e) => {
           e.preventDefault();
-          const email = document.getElementById('login-email').value.trim();
+          const email = document.getElementById('login-email').value.trim().toLowerCase();
           const pass = document.getElementById('login-password').value;
           authErrorMsg = '';
           authLoading = true;
           render();
 
           try {
-            if (fbAuth) {
-              await fbAuth.signInWithEmailAndPassword(email, pass);
+            if (!fbFirestore) throw new Error("Firestore no conectado.");
+            const userRef = fbFirestore.collection('usuarios').doc(email);
+            const userSnap = await userRef.get();
+
+            if (!userSnap.exists) {
+              throw new Error("El correo electrónico no está registrado en el sistema.");
             }
-            localStorage.setItem('teacher_logged', 'true');
+
+            const userData = userSnap.data();
+            if (userData.password !== pass) {
+              throw new Error("Contraseña incorrecta. Verifícala e intenta de nuevo.");
+            }
+
+            const deviceId = getOrCreateDeviceId();
+            if (userData.deviceIdAutorizado && userData.deviceIdAutorizado !== deviceId) {
+              throw new Error("Acceso denegado: Esta cuenta ya se encuentra vinculada y activa en otra computadora.");
+            }
+
+            if (!userData.deviceIdAutorizado) {
+              await userRef.update({ deviceIdAutorizado: deviceId });
+            }
+
+            localStorage.setItem('auth_token_jeopardy', email);
             isTeacherAuthenticated = true;
-            sound.playCorrect();
             authLoading = false;
+            sound.playCorrect();
             render();
           } catch (err) {
             authLoading = false;
-            authErrorMsg = "Error al iniciar sesión: " + (err.message || "Credenciales inválidas");
+            authErrorMsg = err.message || "Error al iniciar sesión.";
             sound.playWrong();
             render();
           }
         });
 
-        document.getElementById('toggle-pass-login')?.addEventListener('click', () => {
-          showPassword = !showPassword;
-          render();
-        });
-        document.getElementById('toggle-pass-reg')?.addEventListener('click', () => {
-          showPassword = !showPassword;
-          render();
-        });
-
-        // Paso A: Verificar Licencia en Firestore con BLINDAJE DE APLICACIÓN
+        // VERIFICAR CÓDIGO DE LICENCIA
         document.getElementById('form-verify-license')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const codeInput = document.getElementById('license-code-input').value.trim().toUpperCase();
@@ -917,64 +798,73 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           render();
 
           try {
-            if (!fbFirestore) throw new Error("Firestore no inicializado.");
+            if (!fbFirestore) throw new Error("Firestore no conectado.");
+            const subRef = fbFirestore.collection('suscripciones').doc(codeInput);
+            const subSnap = await subRef.get();
 
-            const docRef = fbFirestore.collection('suscripciones').doc(codeInput);
-            const docSnap = await docRef.get();
-
-            if (!docSnap.exists) {
-              throw new Error("El código de activación no existe en la base de datos.");
+            if (!subSnap.exists) {
+              throw new Error("El código de activación no existe.");
             }
 
-            const data = docSnap.data();
-
-            // 🛡️ BLINDAJE: Verificar que el código pertenezca exclusivamente a Jeopardy
-            if (data.appAsignada && data.appAsignada !== "Jeopardy") {
-              throw new Error(`Este código pertenece a "${data.appAsignada}" y no puede ser usado en Jeopardy.`);
+            const subData = subSnap.data();
+            if (subData.appAsignada && subData.appAsignada !== "Jeopardy") {
+              throw new Error(`Este código pertenece a "${subData.appAsignada}" y no puede usarse aquí.`);
             }
 
-            // Validar si ya fue usado
-            if (data.activo === false || (data.usadoPor && data.usadoPor.trim() !== "")) {
-              throw new Error("Este código de licencia ya fue utilizado anteriormente.");
+            if (subData.usado || !subData.activo || subData.usadoPor) {
+              throw new Error("Este código de activación ya fue utilizado o se encuentra inactivo.");
             }
 
-            verifiedLicenseData = { id: docSnap.id, ...data };
-
+            verifiedLicenseData = { id: subSnap.id, ...subData };
             authLoading = false;
             licenseStep = 'register';
             sound.playSelect();
             render();
           } catch (err) {
             authLoading = false;
-            authErrorMsg = err.message || "No se pudo verificar el código en Firestore.";
+            authErrorMsg = err.message || "Error al verificar el código.";
             sound.playWrong();
             render();
           }
         });
 
-        // Paso B: Registrar Cuenta con correo y contraseña en Firebase Auth tras validar código
+        // REGISTRAR CON LICENCIA Y QUEMAR CÓDIGO
         document.getElementById('form-register-license')?.addEventListener('submit', async (e) => {
           e.preventDefault();
-          const email = document.getElementById('reg-email').value.trim();
+          const email = document.getElementById('reg-email').value.trim().toLowerCase();
           const pass = document.getElementById('reg-password').value;
           authErrorMsg = '';
           authLoading = true;
           render();
 
           try {
-            if (!fbAuth || !fbFirestore) throw new Error("Servicios de Firebase no disponibles.");
+            if (!fbFirestore) throw new Error("Firestore no conectado.");
+            const userRef = fbFirestore.collection('usuarios').doc(email);
+            const userSnap = await userRef.get();
 
-            // 1. Crear el usuario en Firebase Authentication con el correo y contraseña ingresados
-            await fbAuth.createUserWithEmailAndPassword(email, pass);
+            if (userSnap.exists) {
+              throw new Error("Este correo electrónico ya se encuentra registrado.");
+            }
 
-            // 2. Marcar la licencia como usada en Firestore
-            await fbFirestore.collection('suscripciones').doc(verifiedLicenseData.id).update({
-              activo: false,
-              usadoPor: email,
-              fechaActivacion: new Date().toISOString()
+            const deviceId = getOrCreateDeviceId();
+            const fechaIso = new Date().toISOString();
+
+            await userRef.set({
+              correo: email,
+              password: pass,
+              codigoUsado: verifiedLicenseData.id,
+              deviceIdAutorizado: deviceId,
+              registradoEl: fechaIso
             });
 
-            localStorage.setItem('teacher_logged', 'true');
+            await fbFirestore.collection('suscripciones').doc(verifiedLicenseData.id).update({
+              usado: true,
+              usadoPor: email,
+              fechaActivacion: fechaIso,
+              activo: false
+            });
+
+            localStorage.setItem('auth_token_jeopardy', email);
             isTeacherAuthenticated = true;
             authLoading = false;
             sound.playCorrect();
@@ -982,7 +872,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
             render();
           } catch (err) {
             authLoading = false;
-            authErrorMsg = "Error en el registro: " + (err.message || "Intente con otro correo o contraseña válida.");
+            authErrorMsg = err.message || "Error al completar el registro.";
             sound.playWrong();
             render();
           }
@@ -1234,7 +1124,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                     <span class="font-cinzel text-lg font-black text-[#FFCC00] uppercase">${state.activeClue.categoryTitle}</span>                     <span class="font-bebas text-4xl text-[#FFCC00]">$${state.activeClue.value}</span>
                   </div>
 
-                  <!-- PANTALLA 1: CARGANDO DISPOSITIVOS (OBLIGATORIA ANTES DE LA PREGUNTA) -->
+                  <!-- PANTALLA 1: CARGANDO DISPOSITIVOS -->
                   ${state.loadingDevicesState ? `
                     <div class="my-auto flex flex-col items-center justify-center space-y-6">
                       <div class="w-16 h-16 border-4 border-[#FFCC00] border-t-transparent rounded-full animate-spin"></div>
@@ -1256,7 +1146,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                       </button>
                     </div>
                   ` : `
-                    <!-- PANTALLA 2: PREGUNTA REVELADA Y COMPETENCIA DE TIMBRES -->
+                    <!-- PANTALLA 2: PREGUNTA REVELADA -->
                     <div class="my-auto">
                       <p class="text-3xl sm:text-5xl font-black text-white leading-relaxed">
                         "${state.activeClue.question}"
@@ -1293,13 +1183,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                       </div>
                     ` : ''}
 
-                    ${(state.disqualifiedTeams && state.disqualifiedTeams.length > 0) ? `
-                      <div class="text-xs text-rose-400 font-bold">
-                        Equipos con fallo previo: ${state.disqualifiedTeams.map(id => id.toUpperCase()).join(', ')}
-                      </div>
-                    ` : ''}
-
-                    <!-- BOTONES DE CONTROL DEL PRESENTADOR -->
                     <div class="flex flex-wrap items-center justify-center gap-4 w-full pt-4">
                       ${state.currentTurn ? `
                         <button id="btn-mark-correct" class="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm uppercase shadow">
@@ -1343,7 +1226,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         }
       }
 
-      // 4. PANTALLA DE PODIUM DE EQUIPOS GANADORES
+      // 4. PANTALLA DE PODIUM
       function renderPodiumTeamsScreen(container) {
         const activeTeams = [...state.teams.slice(0, state.teamCount)].sort((a, b) => b.score - a.score);
         const winner = activeTeams[0];
