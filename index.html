@@ -286,9 +286,9 @@
           currentTurn: null,
           buzzQueue: [],
           disqualifiedTeams: [],
+          falseStartPlayers: [], // Almacena jugadores con falsa salida en esta pregunta
           buzzersUnlocked: false,
           countdownValue: null,
-          falseStart: false,
           lastUpdated: Date.now()
         };
       }
@@ -375,15 +375,15 @@
           state.currentTurn = session.activeTurn || null;
           state.buzzQueue = session.buzzQueue ? Object.values(session.buzzQueue).sort((a,b) => a.timestamp - b.timestamp) : [];
           state.disqualifiedTeams = session.disqualifiedTeams || [];
+          state.falseStartPlayers = session.falseStartPlayers || [];
           state.buzzersUnlocked = Boolean(session.buzzersUnlocked);
-          state.falseStart = Boolean(session.falseStart);
           if (session.status) state.status = session.status;
 
           if (!prevUnlocked && state.buzzersUnlocked && currentRole === 'player') {
             sound.playSelect();
           }
 
-          if (state.currentTurn && (!prevTurn || prevTurn.playerId !== state.currentTurn.playerId) && currentRole === 'host' && !state.falseStart) {
+          if (state.currentTurn && (!prevTurn || prevTurn.playerId !== state.currentTurn.playerId) && currentRole === 'host') {
             sound.playBuzz();
           }
 
@@ -441,8 +441,8 @@
         state.currentTurn = null;
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
-        state.buzzersUnlocked = false; // BLOQUEADOS HASTA QUE ACABE EL CONTEO
-        state.falseStart = false;
+        state.falseStartPlayers = [];
+        state.buzzersUnlocked = false; // Bloqueados durante el conteo
 
         sound.playTick();
 
@@ -452,19 +452,13 @@
             activeTurn: null,
             buzzQueue: null,
             disqualifiedTeams: null,
-            buzzersUnlocked: false,
-            falseStart: false
+            falseStartPlayers: null,
+            buzzersUnlocked: false
           });
         }
         render();
 
         countdownInterval = setInterval(() => {
-          if (state.falseStart) {
-            clearInterval(countdownInterval);
-            countdownInterval = null;
-            return;
-          }
-
           state.countdownValue--;
           if (state.countdownValue > 0) {
             sound.playTick();
@@ -473,7 +467,7 @@
             clearInterval(countdownInterval);
             countdownInterval = null;
             state.countdownValue = null;
-            state.buzzersUnlocked = true; // SE DESBLOQUEAN LOS TIMBRES AL TERMINAR EL CONTEO
+            state.buzzersUnlocked = true; // Se desbloquean al terminar el conteo
             sound.playClueOpen();
 
             if (fbDb && currentRole === 'host') {
@@ -507,8 +501,8 @@
           state.currentTurn = null;
           state.buzzQueue = [];
           state.disqualifiedTeams = [];
+          state.falseStartPlayers = [];
           state.buzzersUnlocked = false;
-          state.falseStart = false;
 
           if (fbDb) {
             fbDb.ref('jeopardy_game/teams').set(state.teams);
@@ -517,8 +511,8 @@
               activeTurn: null,
               buzzQueue: null,
               disqualifiedTeams: null,
-              buzzersUnlocked: false,
-              falseStart: false
+              falseStartPlayers: null,
+              buzzersUnlocked: false
             });
           }
           persistState(state);
@@ -532,30 +526,7 @@
 
           const remainingQueue = (state.buzzQueue || []).filter(item => !disq.includes(item.teamId));
 
-          if (state.falseStart) {
-            state.activeClue = null;
-            state.countdownValue = null;
-            state.currentTurn = null;
-            state.buzzQueue = [];
-            state.buzzersUnlocked = false;
-            state.falseStart = false;
-
-            const cat = state.categories.find(c => c.id === state.activeClue?.catId);
-            const cl = cat?.clues.find(x => x.id === state.activeClue?.id);
-            if (cl) cl.isAnswered = true;
-
-            if (fbDb) {
-              fbDb.ref('jeopardy_game/teams').set(state.teams);
-              fbDb.ref('sessions/jeopardy_game').update({
-                activeClue: null,
-                activeTurn: null,
-                buzzQueue: null,
-                disqualifiedTeams: null,
-                buzzersUnlocked: false,
-                falseStart: false
-              });
-            }
-          } else if (remainingQueue.length > 0) {
+          if (remainingQueue.length > 0) {
             const nextTurn = remainingQueue.shift();
             state.currentTurn = nextTurn;
             state.buzzQueue = remainingQueue;
@@ -597,8 +568,8 @@
         state.currentTurn = null;
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
+        state.falseStartPlayers = [];
         state.buzzersUnlocked = false;
-        state.falseStart = false;
 
         if (fbDb) {
           fbDb.ref('sessions/jeopardy_game').update({
@@ -606,8 +577,8 @@
             activeTurn: null,
             buzzQueue: null,
             disqualifiedTeams: null,
-            buzzersUnlocked: false,
-            falseStart: false
+            falseStartPlayers: null,
+            buzzersUnlocked: false
           });
         }
         persistState(state);
@@ -623,8 +594,8 @@
         state.currentTurn = null;
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
+        state.falseStartPlayers = [];
         state.buzzersUnlocked = false;
-        state.falseStart = false;
 
         if (fbDb) {
           fbDb.ref('jeopardy_game/teams').set(state.teams);
@@ -633,8 +604,8 @@
             activeTurn: null,
             buzzQueue: null,
             disqualifiedTeams: null,
-            buzzersUnlocked: false,
-            falseStart: false
+            falseStartPlayers: null,
+            buzzersUnlocked: false
           });
         }
         persistState(state);
@@ -1046,29 +1017,17 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                     <span class="font-cinzel text-lg font-black text-[#FFCC00] uppercase">${state.activeClue.categoryTitle}</span>                     <span class="font-bebas text-4xl text-[#FFCC00]">$${state.activeClue.value}</span>
                   </div>
 
-                  <!-- SI ESTÁ EL CONTEO ACTIVO (10 a 1) O HUBO FALSA SALIDA -->
+                  <!-- SI ESTÁ EL CONTEO ACTIVO (10 a 1) -->
                   ${state.countdownValue !== null ? `
                     <div class="my-auto flex flex-col items-center justify-center space-y-4">
-                      ${state.falseStart && state.currentTurn ? `
-                        <div class="w-full bg-rose-950/90 border-4 border-rose-500 rounded-3xl p-8 animate-bounce space-y-3 shadow-2xl">
-                          <span class="text-xs uppercase tracking-widest text-rose-300 font-black">⚠️ ALERTA DE REGLAS</span>
-                          <h3 class="text-4xl sm:text-5xl font-black text-white uppercase">${state.currentTurn.playerName}</h3>
-                          <div class="text-lg sm:text-2xl font-black text-rose-400 uppercase leading-snug space-y-1">
-                            <p>Pulsador oprimido antes de que terminara el conteo.</p>
-                            <p class="text-[#FFCC00]">Respuesta incorrecta automática</p>
-                          </div>
-                          <span class="text-xs sm:text-sm text-slate-300 block uppercase pt-2 font-bold" style="color: ${state.currentTurn.teamColor}">Equipo: ${state.currentTurn.teamName}</span>
-                        </div>
-                      ` : `
-                        <span class="text-sm font-black tracking-widest text-[#FFCC00] uppercase font-cinzel">¡Pulsadores listos! La pregunta aparece en:</span>
-                        <div key="${state.countdownValue}" class="animate-pop-number text-9xl sm:text-[150px] font-black text-white font-cinzel drop-shadow-[0_0_35px_rgba(255,204,0,0.8)]">
-                          ${state.countdownValue}
-                        </div>
-                        <span class="text-xs text-rose-400 font-bold uppercase tracking-wider animate-pulse">🔒 TELÉFONOS BLOQUEADOS DURANTE EL CONTEO</span>
-                        <div class="bg-amber-500/20 border-2 border-amber-400 text-amber-300 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-wide mt-2">
-                          ⚠️ De oprimir el botón antes de leer la pregunta la respuesta se dará por incorrecta.
-                        </div>
-                      `}
+                      <span class="text-sm font-black tracking-widest text-[#FFCC00] uppercase font-cinzel">¡Pulsadores listos! La pregunta aparece en:</span>
+                      <div key="${state.countdownValue}" class="animate-pop-number text-9xl sm:text-[150px] font-black text-white font-cinzel drop-shadow-[0_0_35px_rgba(255,204,0,0.8)]">
+                        ${state.countdownValue}
+                      </div>
+                      <span class="text-xs text-rose-400 font-bold uppercase tracking-wider animate-pulse">🔒 CONTEO EN CURSO (Prohibido pulsar)</span>
+                      <div class="bg-amber-500/20 border-2 border-amber-400 text-amber-300 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-wide mt-2">
+                        ⚠️ De oprimir el botón antes de leer la pregunta la respuesta se dará por incorrecta.
+                      </div>
                     </div>
                   ` : `
                     <!-- PREGUNTA REVELADA Y TIMBRES ACTIVOS -->
@@ -1092,6 +1051,20 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                         </div>
                       `}
                     </div>
+
+                    ${(state.falseStartPlayers && state.falseStartPlayers.length > 0) ? `
+                      <div class="w-full bg-rose-950/80 border-2 border-rose-500 rounded-xl p-3 text-left">
+                        <span class="text-[11px] font-black uppercase text-rose-300 block mb-1 font-cinzel">⚠️ Falsas salidas (Bloqueados en esta pregunta):</span>
+                        <div class="flex flex-wrap gap-2">
+                          ${state.falseStartPlayers.map(fs => `
+                            <div class="px-2.5 py-1 rounded bg-rose-950 border border-rose-600 text-xs font-bold text-white flex items-center gap-1.5">
+                              <span>${fs.playerName}</span>
+                              <span class="text-[10px] text-rose-300 uppercase">(${fs.teamName})</span>
+                            </div>
+                          `).join('')}
+                        </div>
+                      </div>
+                    ` : ''}
 
                     ${(state.buzzQueue && state.buzzQueue.length > 0) ? `
                       <div class="w-full bg-[#00021A] rounded-xl p-3 border border-blue-900 text-left">
@@ -1123,11 +1096,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                       </button>
                       <button id="btn-mark-wrong" class="px-6 py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-sm uppercase shadow">
                         ✗ Incorrecto (-$${state.activeClue.value}) y Pasar Turno
-                      </button>
-                    ` : ''}
-                    ${(state.falseStart && state.currentTurn) ? `
-                      <button id="btn-apply-false-start" class="px-6 py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-sm uppercase shadow">
-                        Aplicar Penalización (-$${state.activeClue.value}) y Cerrar Pregunta ✗
                       </button>
                     ` : ''}
                     <button id="btn-cancel-clue" class="px-6 py-3.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase">
@@ -1162,37 +1130,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           document.getElementById('btn-cancel-clue')?.addEventListener('click', cancelActiveClue);
           document.getElementById('btn-mark-correct')?.addEventListener('click', () => handleAnswerEvaluation(true));
           document.getElementById('btn-mark-wrong')?.addEventListener('click', () => handleAnswerEvaluation(false));
-          document.getElementById('btn-apply-false-start')?.addEventListener('click', () => {
-            const clueVal = state.activeClue.value;
-            const team = state.teams.find(t => t.id === state.currentTurn.teamId);
-            if (team) team.score -= clueVal;
-            sound.playWrong();
-
-            const cat = state.categories.find(c => c.id === state.activeClue.catId);
-            const cl = cat?.clues.find(x => x.id === state.activeClue.id);
-            if (cl) cl.isAnswered = true;
-
-            state.activeClue = null;
-            state.countdownValue = null;
-            state.currentTurn = null;
-            state.buzzQueue = [];
-            state.disqualifiedTeams = [];
-            state.buzzersUnlocked = false;
-            state.falseStart = false;
-
-            if (fbDb) {
-              fbDb.ref('jeopardy_game/teams').set(state.teams);
-              fbDb.ref('sessions/jeopardy_game').update({
-                activeClue: null,
-                activeTurn: null,
-                buzzQueue: null,
-                disqualifiedTeams: null,
-                buzzersUnlocked: false,
-                falseStart: false
-              });
-            }
-            persistState(state);
-          });
         }
       }
 
@@ -1361,15 +1298,16 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         }
 
         const isDisqualified = (state.disqualifiedTeams || []).includes(myTeamId);
+        const hasFalseStart = (state.falseStartPlayers || []).some(fs => fs.playerId === myId);
         const didIWin = state.currentTurn?.playerId === myId;
         const someoneFromMyTeamInQueue = (state.currentTurn?.teamId === myTeamId) || 
           (state.buzzQueue || []).some(q => q.teamId === myTeamId);
 
-        const isBuzzerOpen = state.activeClue !== null && state.buzzersUnlocked && !isDisqualified && !someoneFromMyTeamInQueue;
+        const isBuzzerOpen = state.activeClue !== null && state.buzzersUnlocked && !isDisqualified && !hasFalseStart && !someoneFromMyTeamInQueue;
 
         let statusMessage = "Esperando pregunta en el tablero...";
-        if (state.falseStart && didIWin) {
-          statusMessage = "¡TE ADELANTASTE! RESPUESTA INCORRECTA AUTOMÁTICA";
+        if (hasFalseStart) {
+          statusMessage = "Pulsador oprimido antes de que terminara el conteo. Respuesta incorrecta automática";
         } else if (state.activeClue !== null && !state.buzzersUnlocked) {
           statusMessage = "🔒 ESPERA A QUE TERMINE EL CONTEO";
         } else if (didIWin) {
@@ -1388,7 +1326,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
               <span class="text-xs uppercase font-bold text-blue-300 block">Equipo: <strong class="text-white">${myTeamId.toUpperCase()}</strong></span>
               <span class="text-lg font-black text-[#FFCC00] block">${myName}</span>
               <span class="text-xs font-black uppercase block ${
-                state.falseStart && didIWin ? 'text-rose-400 animate-pulse' :
+                hasFalseStart ? 'text-rose-400 animate-pulse' :
                 (didIWin ? 'text-emerald-400 animate-bounce' : 
                 (isBuzzerOpen ? 'text-emerald-400' : (isDisqualified ? 'text-rose-400' : 'text-blue-300')))
               }">${statusMessage}</span>
@@ -1434,11 +1372,15 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
             const isFalseStart = !state.buzzersUnlocked;
 
             if (isFalseStart) {
-              fbDb.ref('sessions/jeopardy_game').update({
-                activeTurn: buzzData,
-                falseStart: true,
-                buzzersUnlocked: false
-              });
+              // Aplicar penalización automática de puntos al equipo por pulsar antes de tiempo
+              const clueVal = state.activeClue.value;
+              if (teamObj) teamObj.score -= clueVal;
+
+              const currentFalseStarts = state.falseStartPlayers || [];
+              currentFalseStarts.push(buzzData);
+
+              fbDb.ref('jeopardy_game/teams').set(state.teams);
+              fbDb.ref('sessions/jeopardy_game/falseStartPlayers').set(currentFalseStarts);
             } else {
               fbDb.ref('sessions/jeopardy_game/activeTurn').transaction(current => {
                 if (current === null) return buzzData;
