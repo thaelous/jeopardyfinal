@@ -601,7 +601,6 @@
         sound.playWrong();
 
         if (fbDb) {
-          // Limpiar inmediatamente nodos de Firebase antes de recargar
           fbDb.ref('jeopardy_game').remove();
           fbDb.ref('sessions/jeopardy_game').set({ globalReset: true });
         }
@@ -753,11 +752,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
 
         if (state.status === 'podium_teams') {
           renderPodiumTeamsScreen(app);
-          return;
-        }
-
-        if (state.status === 'podium_individuals') {
-          renderPodiumIndividualsScreen(app);
           return;
         }
 
@@ -1010,7 +1004,9 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                       <div key="${state.countdownValue}" class="animate-pop-number text-9xl sm:text-[150px] font-black text-white font-cinzel drop-shadow-[0_0_35px_rgba(255,204,0,0.8)]">
                         ${state.countdownValue}
                       </div>
-                      <span class="text-xs text-emerald-400 font-bold uppercase tracking-wider animate-pulse">● Teléfonos activados y en espera</span>
+                      <div class="bg-amber-500/20 border-2 border-amber-400 text-amber-300 px-6 py-3 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-wide mt-2 text-center leading-relaxed shadow-lg">
+                        ⚠️ NO OPRIMIR EL PULSADOR HASTA QUE SALGA DE LA PREGUNTA.<br>DE HACERLO SE DARÁ LA RESPUESTA COMO INCORRECTA.
+                      </div>
                     </div>
                   ` : `
                     <!-- PREGUNTA REVELADA Y TIMBRES ACTIVOS -->
@@ -1134,84 +1130,25 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
             </main>
 
             <footer class="w-full max-w-4xl flex justify-end">
-              <button id="btn-next-podium" class="px-8 py-3.5 bg-[#FFCC00] text-[#000533] rounded-2xl font-black text-base uppercase hover:bg-yellow-400 shadow-lg">
-                Siguiente (Podium Individual) ▶
+              <button id="btn-back-setup-podium" class="px-8 py-3.5 bg-blue-900 border-2 border-blue-500 text-white rounded-2xl font-black text-base uppercase hover:bg-blue-800 shadow-lg">
+                Volver a Configuración ⚙️
               </button>
             </footer>
           </div>
         `;
 
         document.getElementById('btn-logout-podium-teams').addEventListener('click', executeGlobalLogout);
-        document.getElementById('btn-next-podium').addEventListener('click', () => {
+        document.getElementById('btn-back-setup-podium').addEventListener('click', () => {
           sound.playSelect();
-          state.status = 'podium_individuals';
+          state.status = 'setup';
           persistState(state);
         });
       }
 
-      // 5. PANTALLA DE PODIUM DE INDIVIDUALES (TRES PRIMEROS LUGARES GENERALES)
-      function renderPodiumIndividualsScreen(container) {
-        let allPlayers = [];
-        state.teams.slice(0, state.teamCount).forEach(team => {
-          const membersList = team.members ? (Array.isArray(team.members) ? team.members : Object.values(team.members)) : [];
-          if (membersList.length > 0) {
-            membersList.forEach(m => {
-              allPlayers.push({
-                name: m.name || 'Participante',
-                teamName: team.name,
-                teamColor: team.color,
-                score: team.score
-              });
-            });
-          }
-        });
-
-        allPlayers.sort((a, b) => b.score - a.score);
-        const topThree = allPlayers.slice(0, 3);
-        if (typeof confetti === 'function') confetti({ particleCount: 150, spread: 100, origin: { y: 0.5 } });
-
-        container.innerHTML = `
-          <div class="min-h-screen bg-[#000533] p-6 flex flex-col justify-between items-center text-center">
-            <header class="w-full max-w-4xl flex justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4">
-              <h1 class="text-xl font-black text-[#FFCC00] uppercase font-cinzel">🌟 TRES PRIMEROS LUGARES GENERALES 🌟</h1>
-              <button id="btn-logout-podium-ind" class="px-3.5 py-1.5 bg-rose-600 rounded-xl text-xs font-bold uppercase hover:bg-rose-500">Cerrar Sesión</button>
-            </header>
-
-            <main class="my-auto max-w-4xl w-full space-y-4">
-              ${topThree.length === 0 ? `
-                <div class="text-blue-300 text-base">No hay participantes registrados en los equipos.</div>
-              ` : `
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  ${topThree.map((p, idx) => `
-                    <div class="p-6 rounded-3xl border-4 bg-[#000428] flex flex-col items-center justify-center shadow-xl relative overflow-hidden" style="border-color: ${idx === 0 ? '#FFCC00' : (idx === 1 ? '#94A3B8' : '#B45309')}">
-                      <span class="text-xs font-black uppercase px-3 py-1 rounded-full mb-3" style="background-color: ${idx === 0 ? '#FFCC00' : (idx === 1 ? '#94A3B8' : '#B45309')}; color: #000533;">
-                        ${idx === 0 ? '🥇 1er Lugar' : (idx === 1 ? '🥈 2do Lugar' : '🥉 3er Lugar')}
-                      </span>
-                      <h3 class="text-2xl font-black text-white uppercase truncate w-full mb-1">${escapeHtml(p.name)}</h3>
-                      <span class="text-xs font-bold uppercase mb-3" style="color: ${p.teamColor}">Equipo: ${p.teamName}</span>
-                      <span class="text-3xl font-mono font-bold text-emerald-400">$${p.score}</span>
-                    </div>
-                  `).join('')}
-                </div>
-              `}
-            </main>
-
-            <footer class="w-full max-w-4xl flex justify-center pt-2">
-              <button id="btn-final-logout" class="px-8 py-3.5 bg-rose-600 text-white rounded-2xl font-black text-sm uppercase hover:bg-rose-500 shadow-lg">
-                Cerrar Sesión Global y Finalizar ⏻
-              </button>
-            </footer>
-          </div>
-        `;
-
-        document.getElementById('btn-logout-podium-ind').addEventListener('click', executeGlobalLogout);
-        document.getElementById('btn-final-logout').addEventListener('click', executeGlobalLogout);
-      }
-
-      // 6. VISTA MÓVIL DEL PARTICIPANTE
+      // 5. VISTA MÓVIL DEL PARTICIPANTE
       function renderPlayerView(container) {
         let myTeamId = assignedTeamId || localStorage.getItem('jeopardy_player_team') || 'azul';
-        let myName = localStorage.getItem('jeopardy_player_name') || '';
+        let myName = localStorage.getItem('jeopardy_player_name'] || '';
         let myId = localStorage.getItem('jeopardy_player_id') || '';
 
         if (!myName) {
@@ -1255,7 +1192,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           return;
         }
 
-        if (state.status === 'podium_teams' || state.status === 'podium_individuals') {
+        if (state.status === 'podium_teams') {
           container.innerHTML = `
             <div class="min-h-screen bg-[#000533] p-6 flex flex-col justify-center items-center text-center space-y-4">
               <div class="w-20 h-20 rounded-2xl bg-[#060CE9] border-2 border-[#FFCC00] flex items-center justify-center font-cinzel text-4xl font-black text-[#FFCC00] shadow-lg">🏆</div>
