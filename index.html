@@ -338,10 +338,11 @@
 
         fbDb.ref('sessions/jeopardy_game/globalReset').on('value', (snap) => {
           if (snap.val() === true) {
-            fbDb.ref('sessions/jeopardy_game/globalReset').remove();
             localStorage.clear();
             sessionStorage.clear();
-            location.reload();
+            // Cierra la pestaña o redirige si el navegador bloquea el cierre automático
+            try { window.close(); } catch (e) {}
+            location.href = window.location.pathname;
           }
         });
 
@@ -425,7 +426,7 @@
         if (!clue || clue.isAnswered) return;
 
         state.activeClue = { ...clue, categoryTitle: cat.title, catId: cat.id };
-        state.loadingDevicesState = true; // FUERZA la pantalla de "Cargando dispositivos..."
+        state.loadingDevicesState = true;
         state.currentTurn = null;
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
@@ -447,7 +448,7 @@
       }
 
       function deployQuestion() {
-        state.loadingDevicesState = false; // Manda a la pantalla de la pregunta real
+        state.loadingDevicesState = false;
         sound.playClueOpen();
 
         if (fbDb) {
