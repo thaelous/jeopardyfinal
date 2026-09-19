@@ -383,7 +383,7 @@
             sound.playSelect();
           }
 
-          if (state.currentTurn && (!prevTurn || prevTurn.playerId !== state.currentTurn.playerId) && currentRole === 'host') {
+          if (state.currentTurn && (!prevTurn || prevTurn.playerId !== state.currentTurn.playerId) && currentRole === 'host' && !state.falseStart) {
             sound.playBuzz();
           }
 
@@ -1045,14 +1045,14 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                   ${state.countdownValue !== null ? `
                     <div class="my-auto flex flex-col items-center justify-center space-y-4">
                       ${state.falseStart && state.currentTurn ? `
-                        <div class="w-full bg-rose-950/80 border-4 border-rose-500 rounded-2xl p-6 animate-bounce space-y-3">
-                          <span class="text-xs uppercase tracking-widest text-rose-300 font-black">⚠️ FALSA SALIDA DETECTADA</span>
-                          <h3 class="text-4xl font-black text-white uppercase">${state.currentTurn.playerName}</h3>
-                          <div class="text-base sm:text-lg font-black text-rose-400 uppercase leading-snug space-y-1">
+                        <div class="w-full bg-rose-950/90 border-4 border-rose-500 rounded-3xl p-8 animate-bounce space-y-3 shadow-2xl">
+                          <span class="text-xs uppercase tracking-widest text-rose-300 font-black">⚠️ ALERTA DE REGLAS</span>
+                          <h3 class="text-4xl sm:text-5xl font-black text-white uppercase">${state.currentTurn.playerName}</h3>
+                          <div class="text-lg sm:text-2xl font-black text-rose-400 uppercase leading-snug space-y-1">
                             <p>Pulsador oprimido antes de que terminara el conteo.</p>
                             <p class="text-[#FFCC00]">Respuesta incorrecta automática</p>
                           </div>
-                          <span class="text-xs text-slate-300 block uppercase pt-1" style="color: ${state.currentTurn.teamColor}">Equipo: ${state.currentTurn.teamName}</span>
+                          <span class="text-xs sm:text-sm text-slate-300 block uppercase pt-2 font-bold" style="color: ${state.currentTurn.teamColor}">Equipo: ${state.currentTurn.teamName}</span>
                         </div>
                       ` : `
                         <span class="text-sm font-black tracking-widest text-[#FFCC00] uppercase font-cinzel">¡Pulsadores listos! La pregunta aparece en:</span>
