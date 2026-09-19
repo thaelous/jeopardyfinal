@@ -280,7 +280,7 @@
           buzzQueue: [],
           disqualifiedTeams: [],
           buzzersUnlocked: false,
-          loadingDevicesState: true, // true = Pantalla de Cargando dispositivos, false = Pregunta revelada
+          loadingDevicesState: true,
           lastUpdated: Date.now()
         };
       }
@@ -425,11 +425,11 @@
         if (!clue || clue.isAnswered) return;
 
         state.activeClue = { ...clue, categoryTitle: cat.title, catId: cat.id };
-        state.loadingDevicesState = true; // Pantalla de cargando dispositivos
+        state.loadingDevicesState = true; // FUERZA la pantalla de "Cargando dispositivos..."
         state.currentTurn = null;
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
-        state.buzzersUnlocked = true; // Activa los pulsadores en los móviles de inmediato
+        state.buzzersUnlocked = true;
 
         sound.playSelect();
 
@@ -447,7 +447,7 @@
       }
 
       function deployQuestion() {
-        state.loadingDevicesState = false;
+        state.loadingDevicesState = false; // Manda a la pantalla de la pregunta real
         sound.playClueOpen();
 
         if (fbDb) {
@@ -920,7 +920,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         });
       }
 
-      // 3. TABLERO DE JUEGO Y MODAL CON PANTALLA DE CARGANDO DISPOSITIVOS
+      // 3. TABLERO DE JUEGO Y MODAL CON PANTALLA INTERMEDIA DE CARGANDO DISPOSITIVOS
       function renderGameScreen(container) {
         const teamCount = state.teamCount || state.teams.length;
         const activeTeams = state.teams.slice(0, teamCount);
@@ -973,7 +973,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
               </div>
             </main>
 
-            <!-- MODAL DE PREGUNTA / CARGANDO DISPOSITIVOS -->
+            <!-- MODAL DE PREGUNTA / PANTALLA INTERMEDIA -->
             ${state.activeClue ? `
               <div class="fixed inset-0 bg-[#000533]/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 animate-clue-zoom">
                 <div class="max-w-4xl w-full bg-[#000842] border-4 border-[#FFCC00] rounded-3xl p-8 shadow-[0_0_80px_rgba(255,204,0,0.4)] flex flex-col items-center text-center relative space-y-6 min-h-[460px] justify-between">
@@ -982,7 +982,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                     <span class="font-cinzel text-lg font-black text-[#FFCC00] uppercase">${state.activeClue.categoryTitle}</span>                     <span class="font-bebas text-4xl text-[#FFCC00]">$${state.activeClue.value}</span>
                   </div>
 
-                  <!-- ESTADO 1: CARGANDO DISPOSITIVOS (PULSADORES ACTIVOS EN MÓVILES) -->
+                  <!-- PANTALLA 1: CARGANDO DISPOSITIVOS (OBLIGATORIA ANTES DE LA PREGUNTA) -->
                   ${state.loadingDevicesState ? `
                     <div class="my-auto flex flex-col items-center justify-center space-y-6">
                       <div class="w-16 h-16 border-4 border-[#FFCC00] border-t-transparent rounded-full animate-spin"></div>
@@ -990,13 +990,13 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                         Cargando dispositivos...
                       </div>
                       <div class="bg-amber-500/20 border-2 border-amber-400 text-amber-300 px-6 py-4 rounded-2xl text-xs sm:text-sm font-bold uppercase tracking-wide text-center leading-relaxed shadow-lg max-w-xl">
-                        ⚠️ LOS PULSADORES ESTÁN ACTIVADOS EN LOS DISPOSITIVOS.<br>NO OPRIMIR HASTA QUE SALGA LA PREGUNTA O SE DARÁ COMO INCORRECTA.
+                        ⚠️ LOS PULSADORES ESTÁN ACTIVOS EN LOS DISPOSITIVOS.<br>NO OPRIMIR HASTA QUE SE DESPLIEGUE LA PREGUNTA.
                       </div>
                       <p class="text-xs text-blue-300 italic">Verifica que los equipos estén listos y presiona el botón inferior para desplegar la pregunta.</p>
                     </div>
 
                     <div class="flex flex-wrap items-center justify-center gap-4 w-full pt-4">
-                      <button id="btn-deploy-question" class="px-8 py-4 bg-[#FFCC00] hover:bg-yellow-400 text-[#000533] rounded-2xl font-black text-base uppercase shadow-xl">
+                      <button id="btn-deploy-question" class="px-8 py-4 bg-[#FFCC00] hover:bg-yellow-400 text-[#000533] rounded-2xl font-black text-base uppercase shadow-xl cursor-pointer">
                         Desplegar Pregunta 🚀
                       </button>
                       <button id="btn-cancel-clue" class="px-6 py-4 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase">
@@ -1004,7 +1004,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                       </button>
                     </div>
                   ` : `
-                    <!-- ESTADO 2: PREGUNTA REVELADA Y COMPETENCIA DE TIMBRES -->
+                    <!-- PANTALLA 2: PREGUNTA REVELADA Y COMPETENCIA DE TIMBRES -->
                     <div class="my-auto">
                       <p class="text-3xl sm:text-5xl font-black text-white leading-relaxed">
                         "${state.activeClue.question}"
