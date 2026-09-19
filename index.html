@@ -306,7 +306,9 @@
       let assignedTeamId = urlParams.get('team') || null;
       let currentRole = (urlParams.get('role') === 'player' || assignedTeamId !== null) ? 'player' : 'host';
 
-      if (currentRole === 'host') state.status = 'setup';
+      if (currentRole === 'host' && state.status === 'setup') {
+        // Asegurar estado inicial limpio
+      }
 
       // Credenciales Firebase
       const _k1 = "AIzaSyDaeedSq8IQ";
@@ -609,7 +611,7 @@
         localStorage.clear();
         state = getDefaultState();
         state.status = 'setup';
-        location.reload();
+        location.href = window.location.pathname;
       }
 
       function downloadCSVSample() {
@@ -1148,7 +1150,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
       // 5. VISTA MÓVIL DEL PARTICIPANTE
       function renderPlayerView(container) {
         let myTeamId = assignedTeamId || localStorage.getItem('jeopardy_player_team') || 'azul';
-        let myName = localStorage.getItem('jeopardy_player_name'] || '';
+        let myName = localStorage.getItem('jeopardy_player_name') || '';
         let myId = localStorage.getItem('jeopardy_player_id') || '';
 
         if (!myName) {
