@@ -286,7 +286,7 @@
           currentTurn: null,
           buzzQueue: [],
           disqualifiedTeams: [],
-          falseStartPlayers: [], // Almacena jugadores con falsa salida en esta pregunta
+          falseStartPlayers: [],
           buzzersUnlocked: false,
           countdownValue: null,
           lastUpdated: Date.now()
@@ -442,7 +442,7 @@
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
         state.falseStartPlayers = [];
-        state.buzzersUnlocked = false; // Bloqueados durante el conteo
+        state.buzzersUnlocked = true; // ACTIVOS DURANTE EL CONTEO
 
         sound.playTick();
 
@@ -453,7 +453,7 @@
             buzzQueue: null,
             disqualifiedTeams: null,
             falseStartPlayers: null,
-            buzzersUnlocked: false
+            buzzersUnlocked: true
           });
         }
         render();
@@ -467,12 +467,7 @@
             clearInterval(countdownInterval);
             countdownInterval = null;
             state.countdownValue = null;
-            state.buzzersUnlocked = true; // Se desbloquean al terminar el conteo
             sound.playClueOpen();
-
-            if (fbDb && currentRole === 'host') {
-              fbDb.ref('sessions/jeopardy_game/buzzersUnlocked').set(true);
-            }
             render();
           }
         }, 1000);
@@ -654,7 +649,7 @@ Deportes,100,País con más títulos ganados en la Copa Mundial de Fútbol,Brasi
 Deportes,200,Puntuación máxima perfecta en una partida de boliche,300 puntos
 Deportes,300,Velocista jamaiquino récord mundial en 100 y 200 metros,Usain Bolt
 Deportes,400,Torneo de tenis Grand Slam disputado sobre césped en Londres,Wimbledon
-Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadores`;
+Deportes,500,Número de jugadores in cancha por equipo en básquetbol,5 jugadores`;
 
         const blob = new Blob([sampleContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
@@ -1024,7 +1019,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                       <div key="${state.countdownValue}" class="animate-pop-number text-9xl sm:text-[150px] font-black text-white font-cinzel drop-shadow-[0_0_35px_rgba(255,204,0,0.8)]">
                         ${state.countdownValue}
                       </div>
-                      <span class="text-xs text-rose-400 font-bold uppercase tracking-wider animate-pulse">🔒 CONTEO EN CURSO (Prohibido pulsar)</span>
+                      <span class="text-xs text-emerald-400 font-bold uppercase tracking-wider animate-pulse">● TIMBRES ACTIVOS DURANTE EL CONTEO</span>
                       <div class="bg-amber-500/20 border-2 border-amber-400 text-amber-300 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-wide mt-2">
                         ⚠️ De oprimir el botón antes de leer la pregunta la respuesta se dará por incorrecta.
                       </div>
@@ -1242,7 +1237,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
       function renderPlayerView(container) {
         let myTeamId = assignedTeamId || localStorage.getItem('jeopardy_player_team') || 'azul';
         let myName = localStorage.getItem('jeopardy_player_name') || '';
-        let myId = localStorage.getItem('jeopardy_player_id') || '';
+        let myId = localStorage.getItem('jeopardy_player_id'] || '';
 
         if (!myName) {
           container.innerHTML = `
@@ -1298,7 +1293,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         }
 
         const isDisqualified = (state.disqualifiedTeams || []).includes(myTeamId);
-        const hasFalseStart = (state.falseStartPlayers || []).some(fs => fs.playerId === myId);
+        const hasFalseStart = (state.falseStartPlayers || []).some(fs => fs.playerId === myId || fs.teamId === myTeamId);
         const didIWin = state.currentTurn?.playerId === myId;
         const someoneFromMyTeamInQueue = (state.currentTurn?.teamId === myTeamId) || 
           (state.buzzQueue || []).some(q => q.teamId === myTeamId);
@@ -1308,8 +1303,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         let statusMessage = "Esperando pregunta en el tablero...";
         if (hasFalseStart) {
           statusMessage = "Pulsador oprimido antes de que terminara el conteo. Respuesta incorrecta automática";
-        } else if (state.activeClue !== null && !state.buzzersUnlocked) {
-          statusMessage = "🔒 ESPERA A QUE TERMINE EL CONTEO";
         } else if (didIWin) {
           statusMessage = "¡TIENES EL TURNO! RESPONDE EN VOZ ALTA";
         } else if (someoneFromMyTeamInQueue) {
@@ -1369,10 +1362,10 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
               timestamp: accurateTimestamp
             };
 
-            const isFalseStart = !state.buzzersUnlocked;
+            const isDuringCountdown = state.countdownValue !== null;
 
-            if (isFalseStart) {
-              // Aplicar penalización automática de puntos al equipo por pulsar antes de tiempo
+            if (isDuringCountdown) {
+              // Falsa salida durante el conteo: penaliza puntos al equipo y bloquea al usuario/equipo para esta pregunta
               const clueVal = state.activeClue.value;
               if (teamObj) teamObj.score -= clueVal;
 
