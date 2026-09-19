@@ -441,7 +441,7 @@
         state.currentTurn = null;
         state.buzzQueue = [];
         state.disqualifiedTeams = [];
-        state.buzzersUnlocked = true;
+        state.buzzersUnlocked = false; // BLOQUEADOS HASTA QUE ACABE EL CONTEO
         state.falseStart = false;
 
         sound.playTick();
@@ -452,7 +452,7 @@
             activeTurn: null,
             buzzQueue: null,
             disqualifiedTeams: null,
-            buzzersUnlocked: true,
+            buzzersUnlocked: false,
             falseStart: false
           });
         }
@@ -473,7 +473,12 @@
             clearInterval(countdownInterval);
             countdownInterval = null;
             state.countdownValue = null;
+            state.buzzersUnlocked = true; // SE DESBLOQUEAN LOS TIMBRES AL TERMINAR EL CONTEO
             sound.playClueOpen();
+
+            if (fbDb && currentRole === 'host') {
+              fbDb.ref('sessions/jeopardy_game/buzzersUnlocked').set(true);
+            }
             render();
           }
         }, 1000);
@@ -1059,7 +1064,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                         <div key="${state.countdownValue}" class="animate-pop-number text-9xl sm:text-[150px] font-black text-white font-cinzel drop-shadow-[0_0_35px_rgba(255,204,0,0.8)]">
                           ${state.countdownValue}
                         </div>
-                        <span class="text-xs text-emerald-400 font-bold uppercase tracking-wider animate-pulse">● Teléfonos activados y en espera</span>
+                        <span class="text-xs text-rose-400 font-bold uppercase tracking-wider animate-pulse">🔒 TELÉFONOS BLOQUEADOS DURANTE EL CONTEO</span>
                         <div class="bg-amber-500/20 border-2 border-amber-400 text-amber-300 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold uppercase tracking-wide mt-2">
                           ⚠️ De oprimir el botón antes de leer la pregunta la respuesta se dará por incorrecta.
                         </div>
@@ -1365,6 +1370,8 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         let statusMessage = "Esperando pregunta en el tablero...";
         if (state.falseStart && didIWin) {
           statusMessage = "¡TE ADELANTASTE! RESPUESTA INCORRECTA AUTOMÁTICA";
+        } else if (state.activeClue !== null && !state.buzzersUnlocked) {
+          statusMessage = "🔒 ESPERA A QUE TERMINE EL CONTEO";
         } else if (didIWin) {
           statusMessage = "¡TIENES EL TURNO! RESPONDE EN VOZ ALTA";
         } else if (someoneFromMyTeamInQueue) {
@@ -1424,7 +1431,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
               timestamp: accurateTimestamp
             };
 
-            const isFalseStart = state.countdownValue !== null;
+            const isFalseStart = !state.buzzersUnlocked;
 
             if (isFalseStart) {
               fbDb.ref('sessions/jeopardy_game').update({
