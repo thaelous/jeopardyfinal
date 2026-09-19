@@ -303,12 +303,12 @@
 
       if (currentRole === 'host') state.status = 'setup';
 
-      // Credenciales Firebase EXACTAS copiadas de tu consola
+      // Credenciales oficiales de Firebase
       const firebaseConfig = {
         apiKey: "AIzaSyCaWffSlgpxC0dHTJWx7sdd2jHjvcf7drQ",
         authDomain: "apps-educativas-suscripciones.firebaseapp.com",
         projectId: "apps-educativas-suscripciones",
-        storageBucket: "apps-educativas-suscripciones.firebasestorage.app",
+        storageBucket: "apps-educativas-suscripciones.appspot.com",
         messagingSenderId: "266465203983",
         appId: "1:266465203983:web:83ba940bc2d180898b507a"
       };
@@ -762,7 +762,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         renderGameScreen(app);
       }
 
-      // MODAL DE AUTENTICACIÓN Y LICENCIAS (AuthModal) con BLINDAJE DE APLICACIÓN
+      // MODAL DE AUTENTICACIÓN Y LICENCIAS (AuthModal)
       let authTab = 'login'; // 'login' o 'license'
       let licenseStep = 'verify'; // 'verify' (Paso A) o 'register' (Paso B)
       let verifiedLicenseData = null;
@@ -952,7 +952,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           }
         });
 
-        // Paso B: Registrar Cuenta y Actualizar campos en Firestore ('suscripciones')
+        // Paso B: Registrar Cuenta con correo y contraseña en Firebase Auth tras validar código
         document.getElementById('form-register-license')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const email = document.getElementById('reg-email').value.trim();
@@ -964,8 +964,10 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           try {
             if (!fbAuth || !fbFirestore) throw new Error("Servicios de Firebase no disponibles.");
 
+            // 1. Crear el usuario en Firebase Authentication con el correo y contraseña ingresados
             await fbAuth.createUserWithEmailAndPassword(email, pass);
 
+            // 2. Marcar la licencia como usada en Firestore
             await fbFirestore.collection('suscripciones').doc(verifiedLicenseData.id).update({
               activo: false,
               usadoPor: email,
@@ -980,7 +982,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
             render();
           } catch (err) {
             authLoading = false;
-            authErrorMsg = "Error en el registro: " + (err.message || "Intente con otro correo.");
+            authErrorMsg = "Error en el registro: " + (err.message || "Intente con otro correo o contraseña válida.");
             sound.playWrong();
             render();
           }
