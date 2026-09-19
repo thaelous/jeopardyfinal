@@ -762,7 +762,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         renderGameScreen(app);
       }
 
-      // MODAL DE AUTENTICACIÓN Y LICENCIAS (AuthModal)
+      // MODAL DE AUTENTICACIÓN Y LICENCIAS (AuthModal) con BLINDAJE DE APLICACIÓN
       let authTab = 'login'; // 'login' o 'license'
       let licenseStep = 'verify'; // 'verify' (Paso A) o 'register' (Paso B)
       let verifiedLicenseData = null;
@@ -908,7 +908,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           render();
         });
 
-        // Paso A: Verificar Licencia buscando en Firestore (Colección: suscripciones)
+        // Paso A: Verificar Licencia en Firestore con BLINDAJE DE APLICACIÓN
         document.getElementById('form-verify-license')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const codeInput = document.getElementById('license-code-input').value.trim().toUpperCase();
@@ -919,7 +919,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           try {
             if (!fbFirestore) throw new Error("Firestore no inicializado.");
 
-            // Buscar en la colección 'suscripciones' por ID de documento exacto
             const docRef = fbFirestore.collection('suscripciones').doc(codeInput);
             const docSnap = await docRef.get();
 
@@ -927,12 +926,19 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
               throw new Error("El código de activación no existe en la base de datos.");
             }
 
-            verifiedLicenseData = { id: docSnap.id, ...docSnap.data() };
+            const data = docSnap.data();
 
-            // Validar si ya fue usado (usadoPor tiene correo o activo es falso)
-            if (verifiedLicenseData.activo === false || (verifiedLicenseData.usadoPor && verifiedLicenseData.usadoPor.trim() !== "")) {
+            // 🛡️ BLINDAJE: Verificar que el código pertenezca exclusivamente a Jeopardy
+            if (data.appAsignada && data.appAsignada !== "Jeopardy") {
+              throw new Error(`Este código pertenece a "${data.appAsignada}" y no puede ser usado en Jeopardy.`);
+            }
+
+            // Validar si ya fue usado
+            if (data.activo === false || (data.usadoPor && data.usadoPor.trim() !== "")) {
               throw new Error("Este código de licencia ya fue utilizado anteriormente.");
             }
+
+            verifiedLicenseData = { id: docSnap.id, ...data };
 
             authLoading = false;
             licenseStep = 'register';
@@ -958,10 +964,8 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
           try {
             if (!fbAuth || !fbFirestore) throw new Error("Servicios de Firebase no disponibles.");
 
-            // 1. Crear usuario en Firebase Auth
             await fbAuth.createUserWithEmailAndPassword(email, pass);
 
-            // 2. Actualizar el documento de la licencia en la colección 'suscripciones'
             await fbFirestore.collection('suscripciones').doc(verifiedLicenseData.id).update({
               activo: false,
               usadoPor: email,
