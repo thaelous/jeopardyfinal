@@ -35,9 +35,13 @@
   <!-- Canvas Confetti CDN -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 
-  <!-- Firebase App & Realtime Database CDN (Compat v10) -->
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Firebase App, Realtime Database & Firestore CDN (Compat v10) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
   <style>
     * { box-sizing: border-box; }
@@ -105,12 +109,426 @@
   </style>
 </head>
 <body class="bg-[#000533] text-white antialiased min-h-screen">
+  <div id="auth-root"></div>
   <div id="app" class="min-h-screen flex flex-col"></div>
 
   <script>
     (function() {
       const STORAGE_KEY = 'jeopardy_state';
+      const AUTH_KEY = 'auth_token_jeopardy';
 
+      // Parámetros de URL
+      const urlParams = new URLSearchParams(window.location.search);
+      let assignedTeamId = urlParams.get('team') || null;
+      let currentRole = (urlParams.get('role') === 'player' || assignedTeamId !== null) ? 'player' : 'host';
+
+      // Credenciales Firebase
+      const _k1 = "AIzaSyDaeedSq8IQ";
+      const _k2 = "NifS3DutUGm4jRJmANmhBSE";
+      const firebaseConfig = {
+        apiKey: _k1 + _k2,
+        authDomain: "jeopardyjrh.firebaseapp.com",
+        databaseURL: "https://jeopardyjrh-default-rtdb.firebaseio.com",
+        projectId: "jeopardyjrh",
+        storageBucket: "jeopardyjrh.firebasestorage.app",
+        messagingSenderId: "299331613996",
+        appId: "1:299331613996:web:a4667fcebc645394dbe889"
+      };
+
+      let fbDb = null;
+      let fbFs = null;
+      let serverTimeOffset = 0;
+
+      try {
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        fbDb = firebase.database();
+        fbFs = firebase.firestore();
+      } catch (err) {
+        console.warn('Firebase error:', err);
+      }
+
+      // --- MÓDULO DE AUTENTICACIÓN FIRESTORE ---
+      let authSession = null;
+      let authModalState = {
+        activeTab: 'login', // 'login' | 'redeem'
+        redeemStep: 'code', // 'code' | 'register'
+        licenseCode: '',
+        expirationText: '',
+        regEmail: '',
+        regPassword: '',
+        loginEmail: '',
+        loginPassword: '',
+        isLoading: false,
+        errorMessage: null
+      };
+
+      function initAuthSession() {
+        try {
+          const raw = localStorage.getItem(AUTH_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.identifier) {
+              authSession = parsed;
+            }
+          }
+        } catch (e) {
+          localStorage.removeItem(AUTH_KEY);
+        }
+      }
+
+      function getDeviceId() {
+        let deviceId = localStorage.getItem('app_device_id');
+        if (!deviceId) {
+          deviceId = 'dev_' + Math.random().toString(36).substring(2, 12) + Date.now().toString(36);
+          localStorage.setItem('app_device_id', deviceId);
+        }
+        return deviceId;
+      }
+
+      function renderAuthModal() {
+        const container = document.getElementById('auth-root');
+        if (!container) return;
+
+        // Si es alumno o el host ya está autenticado, no renderiza el modal
+        if (currentRole === 'player' || authSession !== null) {
+          container.innerHTML = '';
+          return;
+        }
+
+        container.innerHTML = `
+          <div id="modal-validacion-acceso" style="background-color: #0f172a;" class="fixed inset-0 z-[100000] flex items-center justify-center p-4 overflow-y-auto select-none backdrop-blur-md">
+            <div id="tarjeta-central-acceso" style="background-color: #1e293b;" class="w-full max-w-md rounded-2xl sm:rounded-3xl border border-[#334155] shadow-2xl p-6 sm:p-8 flex flex-col items-center text-center relative overflow-hidden transition-all">
+              <div class="absolute -top-20 left-1/2 -translate-x-1/2 w-64 h-64 bg-sky-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+              <div class="w-14 h-14 rounded-2xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-[#38bdf8] mb-4 shadow-inner">
+                <i data-lucide="shield-check" class="w-7 h-7 text-[#38bdf8]"></i>
+              </div>
+
+              <div class="flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-sky-500/10 text-[#38bdf8] border border-sky-500/20 mb-3">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                <span>Acceso y Validación Docente</span>
+              </div>
+
+              <h1 class="text-xl sm:text-2xl font-extrabold text-white tracking-tight mb-2">Control de Acceso al Concurso</h1>
+              <p class="text-xs sm:text-sm text-slate-300 mb-6 max-w-xs leading-relaxed">
+                Ingresa con tus credenciales de docente o activa una nueva licencia institucional.
+              </p>
+
+              <!-- Tabs -->
+              <div class="w-full grid grid-cols-2 p-1 bg-[#0f172a] rounded-xl border border-[#334155] mb-6">
+                <button type="button" id="tab-btn-login" class="py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  authModalState.activeTab === 'login'
+                    ? 'bg-[#1e293b] text-white shadow-md border border-[#334155]'
+                    : 'text-slate-400 hover:text-slate-200'
+                }">
+                  <i data-lucide="mail" class="w-4 h-4 text-[#38bdf8]"></i>
+                  <span>Iniciar Sesión</span>
+                </button>
+
+                <button type="button" id="tab-btn-redeem" class="py-2 px-3 rounded-lg text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  authModalState.activeTab === 'redeem'
+                    ? 'bg-[#1e293b] text-white shadow-md border border-[#334155]'
+                    : 'text-slate-400 hover:text-slate-200'
+                }">
+                  <i data-lucide="key-round" class="w-4 h-4 text-[#38bdf8]"></i>
+                  <span>Canjear Licencia</span>
+                </button>
+              </div>
+
+              <!-- Error Box -->
+              ${authModalState.errorMessage ? `
+                <div class="w-full mb-4 p-3 bg-red-950/60 border border-red-700/80 rounded-xl text-red-200 text-xs font-semibold flex items-start gap-2.5 text-left">
+                  <i data-lucide="alert-circle" class="w-4 h-4 text-red-400 shrink-0 mt-0.5"></i>
+                  <span class="flex-1 leading-snug">${escapeHtml(authModalState.errorMessage)}</span>
+                </div>
+              ` : ''}
+
+              <!-- Tab 1: Login -->
+              ${authModalState.activeTab === 'login' ? `
+                <form id="auth-login-form" class="w-full space-y-4">
+                  <div class="text-left">
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">Correo Electrónico</label>
+                    <input id="login-input-email" type="email" value="${escapeHtml(authModalState.loginEmail)}" placeholder="docente@ejemplo.com" ${authModalState.isLoading ? 'disabled' : ''} style="background-color: #0f172a;" class="w-full border border-[#334155] focus:border-[#38bdf8] focus:ring-2 focus:ring-[#38bdf8]/30 text-white text-sm py-2.5 px-3.5 rounded-xl outline-none placeholder:text-slate-500 transition-all" required />
+                  </div>
+                  <div class="text-left">
+                    <label class="block text-xs font-semibold text-slate-300 mb-1.5">Contraseña</label>
+                    <input id="login-input-password" type="password" value="${escapeHtml(authModalState.loginPassword)}" placeholder="••••••••" ${authModalState.isLoading ? 'disabled' : ''} style="background-color: #0f172a;" class="w-full border border-[#334155] focus:border-[#38bdf8] focus:ring-2 focus:ring-[#38bdf8]/30 text-white text-sm py-2.5 px-3.5 rounded-xl outline-none placeholder:text-slate-500 transition-all" required />
+                  </div>
+                  <button type="submit" ${authModalState.isLoading ? 'disabled' : ''} class="w-full py-3 px-5 rounded-xl bg-sky-500 hover:bg-sky-400 active:scale-[0.99] text-slate-950 font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-sky-500/25 disabled:opacity-50 cursor-pointer">
+                    ${authModalState.isLoading ? `
+                      <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-slate-950"></i>
+                      <span>Verificando credenciales...</span>
+                    ` : `
+                      <i data-lucide="lock" class="w-4 h-4 text-slate-950"></i>
+                      <span>Iniciar Sesión</span>
+                    `}
+                  </button>
+                </form>
+              ` : `
+                <!-- Tab 2: Redeem -->
+                ${authModalState.redeemStep === 'code' ? `
+                  <form id="auth-verify-code-form" class="w-full space-y-4">
+                    <div class="text-left">
+                      <label class="block text-xs font-semibold text-slate-300 mb-1.5">Código de Activación</label>
+                      <input id="redeem-input-code" type="text" value="${escapeHtml(authModalState.licenseCode)}" placeholder="SUB-XXXXXX" ${authModalState.isLoading ? 'disabled' : ''} style="background-color: #0f172a;" class="w-full border border-[#334155] focus:border-[#38bdf8] focus:ring-2 focus:ring-[#38bdf8]/30 text-sky-300 font-mono text-center text-base sm:text-lg tracking-widest uppercase font-bold py-3 px-4 rounded-xl outline-none placeholder:text-slate-600 placeholder:normal-case placeholder:font-normal placeholder:tracking-normal transition-all" required />
+                      <p class="text-[11px] text-slate-400 mt-1.5 text-center">Ingresa el código único para verificar su vigencia.</p>
+                    </div>
+                    <button type="submit" ${authModalState.isLoading ? 'disabled' : ''} class="w-full py-3 px-5 rounded-xl bg-sky-500 hover:bg-sky-400 active:scale-[0.99] text-slate-950 font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-sky-500/25 disabled:opacity-50 cursor-pointer">
+                      ${authModalState.isLoading ? `
+                        <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-slate-950"></i>
+                        <span>Verificando código...</span>
+                      ` : `
+                        <i data-lucide="arrow-right" class="w-4 h-4 text-slate-950"></i>
+                        <span>Continuar al Registro</span>
+                      `}
+                    </button>
+                  </form>
+                ` : `
+                  <form id="auth-register-form" class="w-full space-y-4 text-left">
+                    <div class="p-3.5 bg-emerald-950/40 border border-emerald-500/40 rounded-xl flex items-center gap-3">
+                      <i data-lucide="calendar" class="w-5 h-5 text-emerald-400 shrink-0"></i>
+                      <div class="text-left text-xs">
+                        <p class="font-bold text-emerald-300">Licencia confirmada</p>
+                        <p class="text-slate-300">Vigente hasta: <strong class="text-white">${authModalState.expirationText}</strong></p>
+                      </div>
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold text-slate-300 mb-1.5">Correo para tu cuenta</label>
+                      <input id="register-input-email" type="email" value="${escapeHtml(authModalState.regEmail)}" placeholder="docente@ejemplo.com" ${authModalState.isLoading ? 'disabled' : ''} style="background-color: #0f172a;" class="w-full border border-[#334155] focus:border-[#38bdf8] focus:ring-2 focus:ring-[#38bdf8]/30 text-white text-sm py-2.5 px-3.5 rounded-xl outline-none placeholder:text-slate-500 transition-all" required />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-semibold text-slate-300 mb-1.5">Crea tu Contraseña</label>
+                      <input id="register-input-password" type="password" value="${escapeHtml(authModalState.regPassword)}" placeholder="Mínimo 6 caracteres" ${authModalState.isLoading ? 'disabled' : ''} style="background-color: #0f172a;" class="w-full border border-[#334155] focus:border-[#38bdf8] focus:ring-2 focus:ring-[#38bdf8]/30 text-white text-sm py-2.5 px-3.5 rounded-xl outline-none placeholder:text-slate-500 transition-all" required />
+                    </div>
+                    <button type="submit" ${authModalState.isLoading ? 'disabled' : ''} class="w-full py-3 px-5 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-[0.99] text-slate-950 font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/25 disabled:opacity-50 cursor-pointer">
+                      ${authModalState.isLoading ? `
+                        <i data-lucide="loader-2" class="w-4 h-4 animate-spin text-slate-950"></i>
+                        <span>Creando cuenta y activando...</span>
+                      ` : `
+                        <i data-lucide="check-circle-2" class="w-4 h-4 text-slate-950"></i>
+                        <span>Activar Cuenta y Entrar</span>
+                      `}
+                    </button>
+                  </form>
+                `}
+              `}
+
+              <div class="mt-6 pt-4 border-t border-[#334155] w-full flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-400 gap-1.5">
+                <span>¿Eres alumno con enlace de sala?</span>
+                <span class="text-[#38bdf8] font-medium">Acceso directo sin contraseña</span>
+              </div>
+            </div>
+          </div>
+        `;
+
+        if (window.lucide) window.lucide.createIcons();
+
+        // Eventos Modal
+        document.getElementById('tab-btn-login')?.addEventListener('click', () => {
+          authModalState.activeTab = 'login';
+          authModalState.errorMessage = null;
+          renderAuthModal();
+        });
+
+        document.getElementById('tab-btn-redeem')?.addEventListener('click', () => {
+          authModalState.activeTab = 'redeem';
+          authModalState.redeemStep = 'code';
+          authModalState.errorMessage = null;
+          renderAuthModal();
+        });
+
+        const loginForm = document.getElementById('auth-login-form');
+        if (loginForm) {
+          loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const emailInput = (document.getElementById('login-input-email')).value.trim().toLowerCase();
+            const passInput = (document.getElementById('login-input-password')).value;
+            authModalState.loginEmail = emailInput;
+            authModalState.loginPassword = passInput;
+
+            if (!emailInput || !passInput) {
+              authModalState.errorMessage = 'Ingresa tu correo y contraseña.';
+              renderAuthModal();
+              return;
+            }
+
+            if (!fbFs) {
+              authModalState.errorMessage = 'Base de datos Firestore no inicializada.';
+              renderAuthModal();
+              return;
+            }
+
+            authModalState.isLoading = true;
+            authModalState.errorMessage = null;
+            renderAuthModal();
+
+            try {
+              const docSnap = await fbFs.collection('usuarios').doc(emailInput).get();
+              if (!docSnap.exists) {
+                authModalState.errorMessage = 'Usuario no registrado. Si tienes una licencia, canjéala en la otra pestaña.';
+                authModalState.isLoading = false;
+                renderAuthModal();
+                return;
+              }
+
+              const data = docSnap.data();
+              if (data.password !== passInput) {
+                authModalState.errorMessage = 'Contraseña incorrecta.';
+                authModalState.isLoading = false;
+                renderAuthModal();
+                return;
+              }
+
+              const sessionData = {
+                type: 'email',
+                identifier: emailInput,
+                activatedAt: Date.now()
+              };
+              localStorage.setItem(AUTH_KEY, JSON.stringify(sessionData));
+              authSession = sessionData;
+              renderAuthModal();
+              render();
+            } catch (err) {
+              authModalState.errorMessage = err.message || 'Error de autenticación.';
+              authModalState.isLoading = false;
+              renderAuthModal();
+            }
+          });
+        }
+
+        const verifyForm = document.getElementById('auth-verify-code-form');
+        if (verifyForm) {
+          verifyForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const rawCode = (document.getElementById('redeem-input-code')).value.replace(/\s+/g, '').toUpperCase();
+            authModalState.licenseCode = rawCode;
+
+            if (!rawCode) {
+              authModalState.errorMessage = 'Por favor, ingresa tu código de activación.';
+              renderAuthModal();
+              return;
+            }
+
+            if (!fbFs) {
+              authModalState.errorMessage = 'Base de datos Firestore no inicializada.';
+              renderAuthModal();
+              return;
+            }
+
+            authModalState.isLoading = true;
+            authModalState.errorMessage = null;
+            renderAuthModal();
+
+            try {
+              const docSnap = await fbFs.collection('suscripciones').doc(rawCode).get();
+              if (!docSnap.exists) {
+                authModalState.errorMessage = 'El código ingresado no existe en el sistema.';
+                authModalState.isLoading = false;
+                renderAuthModal();
+                return;
+              }
+
+              const data = docSnap.data();
+              if (data.activo === false || data.usado === true || (data.usadoPor && data.usadoPor.trim() !== '')) {
+                authModalState.errorMessage = 'Este código de activación ya fue utilizado o se encuentra inactivo.';
+                authModalState.isLoading = false;
+                renderAuthModal();
+                return;
+              }
+
+              const dias = typeof data.duracionDias === 'number' ? data.duracionDias : 30;
+              const fechaFin = new Date();
+              fechaFin.setDate(fechaFin.getDate() + dias);
+              authModalState.expirationText = fechaFin.toLocaleDateString('es-MX', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+              });
+
+              authModalState.redeemStep = 'register';
+              authModalState.isLoading = false;
+              renderAuthModal();
+            } catch (err) {
+              authModalState.errorMessage = err.message || 'Error al validar el código.';
+              authModalState.isLoading = false;
+              renderAuthModal();
+            }
+          });
+        }
+
+        const regForm = document.getElementById('auth-register-form');
+        if (regForm) {
+          regForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const cleanEmail = (document.getElementById('register-input-email')).value.trim().toLowerCase();
+            const cleanPass = (document.getElementById('register-input-password')).value;
+            authModalState.regEmail = cleanEmail;
+            authModalState.regPassword = cleanPass;
+
+            if (!cleanEmail || !cleanPass) {
+              authModalState.errorMessage = 'Completa el correo y la contraseña para crear tu acceso.';
+              renderAuthModal();
+              return;
+            }
+
+            if (cleanPass.length < 6) {
+              authModalState.errorMessage = 'La contraseña debe tener al menos 6 caracteres.';
+              renderAuthModal();
+              return;
+            }
+
+            authModalState.isLoading = true;
+            authModalState.errorMessage = null;
+            renderAuthModal();
+
+            try {
+              const userRef = fbFs.collection('usuarios').doc(cleanEmail);
+              const userSnap = await userRef.get();
+
+              if (userSnap.exists) {
+                authModalState.errorMessage = 'Este correo ya está registrado. Inicia sesión en la pestaña principal.';
+                authModalState.isLoading = false;
+                renderAuthModal();
+                return;
+              }
+
+              const deviceId = getDeviceId();
+              const sanitizedCode = authModalState.licenseCode;
+              const nowISO = new Date().toISOString();
+
+              await userRef.set({
+                correo: cleanEmail,
+                password: cleanPass,
+                codigoUsado: sanitizedCode,
+                deviceIdAutorizado: deviceId,
+                registradoEl: nowISO
+              });
+
+              await fbFs.collection('suscripciones').doc(sanitizedCode).update({
+                usado: true,
+                usadoPor: cleanEmail,
+                fechaActivacion: nowISO
+              });
+
+              const sessionData = {
+                type: 'email',
+                identifier: cleanEmail,
+                activatedAt: Date.now()
+              };
+              localStorage.setItem(AUTH_KEY, JSON.stringify(sessionData));
+              authSession = sessionData;
+              renderAuthModal();
+              render();
+            } catch (err) {
+              authModalState.errorMessage = err.message || 'Error al registrar usuario y activar licencia.';
+              authModalState.isLoading = false;
+              renderAuthModal();
+            }
+          });
+        }
+      }
+
+      // --- ESTRUCTURA Y LÓGICA DE JEOPARDY ---
       const DEFAULT_TEAMS_TEMPLATE = [
         { id: 'azul', name: 'Equipo Azul', color: '#2563EB', score: 0, members: [] },
         { id: 'rojo', name: 'Equipo Rojo', color: '#DC2626', score: 0, members: [] },
@@ -294,36 +712,7 @@
       }
 
       let state = loadState();
-
-      const urlParams = new URLSearchParams(window.location.search);
-      let assignedTeamId = urlParams.get('team') || null;
-      let currentRole = (urlParams.get('role') === 'player' || assignedTeamId !== null) ? 'player' : 'host';
-
       if (currentRole === 'host') state.status = 'setup';
-
-      // Credenciales Firebase
-      const _k1 = "AIzaSyDaeedSq8IQ";
-      const _k2 = "NifS3DutUGm4jRJmANmhBSE";
-      const firebaseConfig = {
-        apiKey: _k1 + _k2,
-        authDomain: "jeopardyjrh.firebaseapp.com",
-        databaseURL: "https://jeopardyjrh-default-rtdb.firebaseio.com",
-        projectId: "jeopardyjrh",
-        storageBucket: "jeopardyjrh.firebasestorage.app",
-        messagingSenderId: "299331613996",
-        appId: "1:299331613996:web:a4667fcebc645394dbe889"
-      };
-
-      let fbDb = null;
-      let serverTimeOffset = 0;
-
-      try {
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-        fbDb = firebase.database();
-        setupFirebaseSync();
-      } catch (err) {
-        console.warn('Firebase error:', err);
-      }
 
       function getEstimatedServerTime() {
         return Date.now() + serverTimeOffset;
@@ -340,7 +729,6 @@
           if (snap.val() === true) {
             localStorage.clear();
             sessionStorage.clear();
-            // Cierra la pestaña o redirige si el navegador bloquea el cierre automático
             try { window.close(); } catch (e) {}
             location.href = window.location.pathname;
           }
@@ -592,7 +980,9 @@
         }
 
         sessionStorage.clear();
-        localStorage.clear();
+        localStorage.removeItem(AUTH_KEY);
+        localStorage.removeItem(STORAGE_KEY);
+        authSession = null;
         state = getDefaultState();
         state.status = 'setup';
         location.href = window.location.pathname;
@@ -721,6 +1111,15 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         const app = document.getElementById('app');
         if (!app) return;
 
+        // Si es docente y no está autenticado, renderizar modal y ocultar interfaz
+        if (currentRole === 'host' && !authSession) {
+          app.innerHTML = '';
+          renderAuthModal();
+          return;
+        }
+
+        renderAuthModal();
+
         if (currentRole === 'player') {
           renderPlayerView(app);
           return;
@@ -752,7 +1151,10 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         container.innerHTML = `
           <div class="min-h-screen flex flex-col bg-[#000533] p-4">
             <header class="flex justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4 mb-4">
-              <h1 class="text-lg font-black text-white uppercase font-cinzel">Configuración del Torneo Jeopardy</h1>
+              <div>
+                <h1 class="text-lg font-black text-white uppercase font-cinzel">Configuración del Torneo Jeopardy</h1>
+                ${authSession ? `<span class="text-xs text-sky-400 font-mono">Docente: ${escapeHtml(authSession.identifier)}</span>` : ''}
+              </div>
               <button id="btn-logout-setup" class="px-3.5 py-1.5 rounded-xl bg-rose-600 font-bold text-xs uppercase hover:bg-rose-500">Cerrar Sesión Global</button>
             </header>
 
@@ -921,7 +1323,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         });
       }
 
-      // 3. TABLERO DE JUEGO Y MODAL CON PANTALLA INTERMEDIA DE CARGANDO DISPOSITIVOS
+      // 3. TABLERO DE JUEGO Y MODAL CON PANTALLA INTERMEDIA
       function renderGameScreen(container) {
         const teamCount = state.teamCount || state.teams.length;
         const activeTeams = state.teams.slice(0, teamCount);
@@ -931,7 +1333,10 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
             <header class="bg-[#000222] border-b-2 border-[#D4AF37] px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30">
               <div class="flex items-center gap-3">
                 <div class="w-10 h-10 rounded-xl bg-[#060CE9] border-2 border-[#FFCC00] flex items-center justify-center font-cinzel font-black text-[#FFCC00] text-xl shadow">J!</div>
-                <h1 class="text-base sm:text-lg font-black text-white uppercase font-cinzel leading-none">${state.title}</h1>
+                <div>
+                  <h1 class="text-base sm:text-lg font-black text-white uppercase font-cinzel leading-none">${state.title}</h1>
+                  ${authSession ? `<span class="text-[10px] text-sky-400 font-mono">${escapeHtml(authSession.identifier)}</span>` : ''}
+                </div>
               </div>
 
               <div class="flex flex-wrap items-center gap-2">
@@ -983,7 +1388,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                     <span class="font-cinzel text-lg font-black text-[#FFCC00] uppercase">${state.activeClue.categoryTitle}</span>                     <span class="font-bebas text-4xl text-[#FFCC00]">$${state.activeClue.value}</span>
                   </div>
 
-                  <!-- PANTALLA 1: CARGANDO DISPOSITIVOS (OBLIGATORIA ANTES DE LA PREGUNTA) -->
+                  <!-- PANTALLA 1: CARGANDO DISPOSITIVOS -->
                   ${state.loadingDevicesState ? `
                     <div class="my-auto flex flex-col items-center justify-center space-y-6">
                       <div class="w-16 h-16 border-4 border-[#FFCC00] border-t-transparent rounded-full animate-spin"></div>
@@ -1005,7 +1410,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                       </button>
                     </div>
                   ` : `
-                    <!-- PANTALLA 2: PREGUNTA REVELADA Y COMPETENCIA DE TIMBRES -->
+                    <!-- PANTALLA 2: PREGUNTA REVELADA -->
                     <div class="my-auto">
                       <p class="text-3xl sm:text-5xl font-black text-white leading-relaxed">
                         "${state.activeClue.question}"
@@ -1048,7 +1453,6 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
                       </div>
                     ` : ''}
 
-                    <!-- BOTONES DE CONTROL DEL PRESENTADOR -->
                     <div class="flex flex-wrap items-center justify-center gap-4 w-full pt-4">
                       ${state.currentTurn ? `
                         <button id="btn-mark-correct" class="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm uppercase shadow">
@@ -1092,7 +1496,7 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         }
       }
 
-      // 4. PANTALLA DE PODIUM DE EQUIPOS GANADORES
+      // 4. PANTALLA DE PODIUM
       function renderPodiumTeamsScreen(container) {
         const activeTeams = [...state.teams.slice(0, state.teamCount)].sort((a, b) => b.score - a.score);
         const winner = activeTeams[0];
@@ -1277,6 +1681,9 @@ Deportes,500,Número de jugadores en cancha por equipo en básquetbol,5 jugadore
         });
       }
 
+      // Arranque del sistema
+      initAuthSession();
+      setupFirebaseSync();
       render();
     })();
   </script>
