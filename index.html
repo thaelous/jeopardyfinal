@@ -278,14 +278,16 @@
 
       if (currentRole === 'host') state.status = 'setup';
 
-      // Credenciales de Firebase (mismas de Methaplan)
+      // Credenciales de Firebase actualizadas al proyecto jeopardyjrh
       const firebaseConfig = {
-        apiKey: "AIzaSyCaWffSlgpxC0dHTJWx7sdd2jHjvcf7drQ",
-        authDomain: "apps-educativas-suscripciones.firebaseapp.com",
-        projectId: "apps-educativas-suscripciones",
-        storageBucket: "apps-educativas-suscripciones.appspot.com",
-        messagingSenderId: "266465203983",
-        appId: "1:266465203983:web:83ba940bc2d180898b507a"
+        apiKey: "AIzaSyDaeedSq8IQNifS3DutUGm4jRJmANmhBSE",
+        authDomain: "jeopardyjrh.firebaseapp.com",
+        databaseURL: "https://jeopardyjrh-default-rtdb.firebaseio.com",
+        projectId: "jeopardyjrh",
+        storageBucket: "jeopardyjrh.firebasestorage.app",
+        messagingSenderId: "299331613996",
+        appId: "1:299331613996:web:a4667fcebc645394dbe889",
+        measurementId: "G-VN3YVDP7D5"
       };
 
       let fbApp = null;
@@ -626,12 +628,17 @@
           return;
         }
 
+        if (state.status === 'podium_individuals') {
+          renderPodiumIndividualsScreen(app);
+          return;
+        }
+
         renderGameScreen(app);
       }
 
-      // ESTADO DEL MODAL DE AUTENTICACIÓN (ESTILO METHAPLAN)
-      let authTab = 'login'; // 'login' o 'license'
-      let licenseStep = 'verify'; // 'verify' o 'register'
+      // ESTADO DEL MODAL DE AUTENTICACIÓN
+      let authTab = 'login';
+      let licenseStep = 'verify';
       let verifiedLicenseData = null;
       let showPassword = false;
       let authErrorMsg = '';
@@ -648,7 +655,6 @@
                 <p class="text-xs text-blue-200">Inicia sesión o activa tu licencia institucional</p>
               </div>
 
-              <!-- Pestañas -->
               <div class="grid grid-cols-2 gap-2 bg-[#000324] p-1.5 rounded-2xl border border-blue-900">
                 <button type="button" id="tab-btn-login" class="py-2.5 rounded-xl font-bold text-xs uppercase transition ${authTab === 'login' ? 'bg-[#FFCC00] text-[#000533]' : 'text-blue-300 hover:text-white'}">
                   Iniciar Sesión
@@ -660,7 +666,6 @@
 
               ${authErrorMsg ? `<div class="bg-rose-500/20 border border-rose-500 text-rose-300 p-3 rounded-xl text-xs font-bold text-center">${authErrorMsg}</div>` : ''}
 
-              <!-- INICIAR SESIÓN -->
               ${authTab === 'login' ? `
                 <form id="form-login" class="space-y-4">
                   <div>
@@ -681,7 +686,6 @@
                   </button>
                 </form>
               ` : `
-                <!-- CANJEAR LICENCIA -->
                 <div>
                   ${licenseStep === 'verify' ? `
                     <form id="form-verify-license" class="space-y-4">
@@ -744,7 +748,6 @@
         document.getElementById('toggle-pass-login')?.addEventListener('click', () => { showPassword = !showPassword; render(); });
         document.getElementById('toggle-pass-reg')?.addEventListener('click', () => { showPassword = !showPassword; render(); });
 
-        // INICIAR SESIÓN (Método idéntico a Methaplan)
         document.getElementById('form-login')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const email = document.getElementById('login-email').value.trim().toLowerCase();
@@ -789,7 +792,6 @@
           }
         });
 
-        // VERIFICAR CÓDIGO DE LICENCIA
         document.getElementById('form-verify-license')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const codeInput = document.getElementById('license-code-input').value.trim().toUpperCase();
@@ -828,7 +830,6 @@
           }
         });
 
-        // REGISTRAR CON LICENCIA Y QUEMAR CÓDIGO
         document.getElementById('form-register-license')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const email = document.getElementById('reg-email').value.trim().toLowerCase();
@@ -1062,7 +1063,7 @@
         });
       }
 
-      // 3. TABLERO DE JUEGO Y MODAL CON PANTALLA INTERMEDIA DE CARGANDO DISPOSITIVOS
+      // 3. TABLERO DE JUEGO
       function renderGameScreen(container) {
         const teamCount = state.teamCount || state.teams.length;
         const activeTeams = state.teams.slice(0, teamCount);
