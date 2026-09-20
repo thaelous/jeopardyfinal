@@ -690,7 +690,7 @@
                     <form id="form-verify-license" class="space-y-4">
                       <div>
                         <label class="block text-xs font-bold text-[#FFCC00] mb-1">Código de Activación</label>
-                        <input id="license-code-input" type="text" required placeholder="Ej. SUB-XXXXXX" class="w-full p-3 rounded-xl bg-[#000324] border border-amber-500 text-white font-bold text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#FFCC00]" />
+                        <input id="license-code-input" type="text" required placeholder="Ej. JEO-0001" class="w-full p-3 rounded-xl bg-[#000324] border border-amber-500 text-white font-bold text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#FFCC00]" />
                         <span class="text-[11px] text-blue-300 block mt-1">Verifica tu código en la colección 'suscripciones'.</span>
                       </div>
                       <button type="submit" ${authLoading ? 'disabled' : ''} class="w-full py-3.5 bg-blue-600 text-white font-black uppercase text-xs rounded-xl hover:bg-blue-500 transition shadow-lg cursor-pointer">
@@ -810,10 +810,6 @@
             }
 
             const subData = subSnap.data();
-            if (subData.appAsignada && subData.appAsignada !== "Jeopardy") {
-              throw new Error(`Este código pertenece a "${subData.appAsignada}".`);
-            }
-
             if (subData.usado || !subData.activo || subData.usadoPor) {
               throw new Error("Este código ya fue utilizado o está inactivo.");
             }
