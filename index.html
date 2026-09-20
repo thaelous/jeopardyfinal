@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Jeopardy Live Show - Licenciamiento Firestore</title>
 
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -23,14 +24,18 @@
     };
   </script>
 
+  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Cinzel:wght@700;900&family=Bebas+Neue&family=Teko:wght@600;700&display=swap" rel="stylesheet">
 
+  <!-- QRCode.js CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
+  <!-- Canvas Confetti CDN -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 
+  <!-- Firebase App, Firestore & Realtime Database CDN (Compat v10) -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
@@ -273,7 +278,6 @@
 
       if (currentRole === 'host') state.status = 'setup';
 
-      // Credenciales de Firebase actualizadas al proyecto jeopardyjrh
       const firebaseConfig = {
         apiKey: "AIzaSyDaeedSq8IQNifS3DutUGm4jRJmANmhBSE",
         authDomain: "jeopardyjrh.firebaseapp.com",
@@ -743,7 +747,7 @@
         document.getElementById('toggle-pass-login')?.addEventListener('click', () => { showPassword = !showPassword; render(); });
         document.getElementById('toggle-pass-reg')?.addEventListener('click', () => { showPassword = !showPassword; render(); });
 
-        // INICIAR SESIÓN (Corregido para evitar bucle de actualización)
+        // INICIAR SESIÓN (Validación segura con persistencia directa en el Storage)
         document.getElementById('form-login')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const email = document.getElementById('login-email').value.trim().toLowerCase();
@@ -775,11 +779,14 @@
               await userRef.update({ deviceIdAutorizado: deviceId });
             }
 
-            // Guardar bandera de autenticación para persistir sesión y evitar recargas
+            // Establecemos las variables de control antes de recargar o renderizar
             localStorage.setItem('auth_token_jeopardy', email);
             isTeacherAuthenticated = true;
             authLoading = false;
             sound.playCorrect();
+            
+            // Forzamos la entrada limpia al panel de configuración
+            state.status = 'setup';
             render();
           } catch (err) {
             authLoading = false;
@@ -789,7 +796,6 @@
           }
         });
 
-        // VERIFICAR CÓDIGO DE LICENCIA
         document.getElementById('form-verify-license')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const codeInput = document.getElementById('license-code-input').value.trim().toUpperCase();
@@ -828,7 +834,6 @@
           }
         });
 
-        // REGISTRAR CON LICENCIA Y QUEMAR CÓDIGO
         document.getElementById('form-register-license')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const email = document.getElementById('reg-email').value.trim().toLowerCase();
@@ -869,6 +874,8 @@
             authLoading = false;
             sound.playCorrect();
             if (typeof confetti === 'function') confetti({ particleCount: 100, spread: 80, origin: { y: 0.5 } });
+            
+            state.status = 'setup';
             render();
           } catch (err) {
             authLoading = false;
@@ -1115,6 +1122,7 @@
               </div>
             </main>
 
+            <!-- MODAL DE PREGUNTA / PANTALLA INTERMEDIA -->
             ${state.activeClue ? `
               <div class="fixed inset-0 bg-[#000533]/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 animate-clue-zoom">
                 <div class="max-w-4xl w-full bg-[#000842] border-4 border-[#FFCC00] rounded-3xl p-8 shadow-[0_0_80px_rgba(255,204,0,0.4)] flex flex-col items-center text-center relative space-y-6 min-h-[460px] justify-between">
@@ -1123,6 +1131,7 @@
                     <span class="font-cinzel text-lg font-black text-[#FFCC00] uppercase">${state.activeClue.categoryTitle}</span>                     <span class="font-bebas text-4xl text-[#FFCC00]">$${state.activeClue.value}</span>
                   </div>
 
+                  <!-- PANTALLA 1: CARGANDO DISPOSITIVOS (OBLIGATORIA ANTES DE LA PREGUNTA) -->
                   ${state.loadingDevicesState ? `
                     <div class="my-auto flex flex-col items-center justify-center space-y-6">
                       <div class="w-16 h-16 border-4 border-[#FFCC00] border-t-transparent rounded-full animate-spin"></div>
@@ -1144,6 +1153,7 @@
                       </button>
                     </div>
                   ` : `
+                    <!-- PANTALLA 2: PREGUNTA REVELADA Y COMPETENCIA DE TIMBRES -->
                     <div class="my-auto">
                       <p class="text-3xl sm:text-5xl font-black text-white leading-relaxed">
                         "${state.activeClue.question}"
@@ -1186,6 +1196,7 @@
                       </div>
                     ` : ''}
 
+                    <!-- BOTONES DE CONTROL DEL PRESENTADOR -->
                     <div class="flex flex-wrap items-center justify-center gap-4 w-full pt-4">
                       ${state.currentTurn ? `
                         <button id="btn-mark-correct" class="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm uppercase shadow">
