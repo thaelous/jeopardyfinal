@@ -278,6 +278,7 @@
 
       if (currentRole === 'host') state.status = 'setup';
 
+      // Credenciales exactas del nuevo proyecto jeopardyjrh
       const firebaseConfig = {
         apiKey: "AIzaSyDaeedSq8IQNifS3DutUGm4jRJmANmhBSE",
         authDomain: "jeopardyjrh.firebaseapp.com",
@@ -635,7 +636,6 @@
         renderGameScreen(app);
       }
 
-      // ESTADO DEL MODAL DE AUTENTICACIÓN
       let authTab = 'login';
       let licenseStep = 'verify';
       let verifiedLicenseData = null;
@@ -680,7 +680,7 @@
                       </button>
                     </div>
                   </div>
-                  <button type="submit" ${authLoading ? 'disabled' : ''} class="w-full py-3.5 bg-[#FFCC00] text-[#000533] font-black uppercase text-xs rounded-xl hover:bg-yellow-400 transition shadow-lg">
+                  <button type="submit" ${authLoading ? 'disabled' : ''} class="w-full py-3.5 bg-[#FFCC00] text-[#000533] font-black uppercase text-xs rounded-xl hover:bg-yellow-400 transition shadow-lg cursor-pointer">
                     ${authLoading ? 'Verificando...' : 'Entrar al Sistema'}
                   </button>
                 </form>
@@ -693,7 +693,7 @@
                         <input id="license-code-input" type="text" required placeholder="Ej. SUB-XXXXXX" class="w-full p-3 rounded-xl bg-[#000324] border border-amber-500 text-white font-bold text-sm uppercase focus:outline-none focus:ring-2 focus:ring-[#FFCC00]" />
                         <span class="text-[11px] text-blue-300 block mt-1">Verifica tu código en la colección 'suscripciones'.</span>
                       </div>
-                      <button type="submit" ${authLoading ? 'disabled' : ''} class="w-full py-3.5 bg-blue-600 text-white font-black uppercase text-xs rounded-xl hover:bg-blue-500 transition shadow-lg">
+                      <button type="submit" ${authLoading ? 'disabled' : ''} class="w-full py-3.5 bg-blue-600 text-white font-black uppercase text-xs rounded-xl hover:bg-blue-500 transition shadow-lg cursor-pointer">
                         ${authLoading ? 'Buscando código...' : 'Continuar al Registro ➔'}
                       </button>
                     </form>
@@ -717,8 +717,8 @@
                         </div>
                       </div>
                       <div class="flex gap-2 pt-1">
-                        <button type="button" id="btn-back-verify" class="px-4 py-3 bg-slate-700 text-slate-200 rounded-xl font-bold text-xs uppercase">Atrás</button>
-                        <button type="submit" ${authLoading ? 'disabled' : ''} class="flex-1 py-3 bg-[#FFCC00] text-[#000533] font-black uppercase text-xs rounded-xl hover:bg-yellow-400">
+                        <button type="button" id="btn-back-verify" class="px-4 py-3 bg-slate-700 text-slate-200 rounded-xl font-bold text-xs uppercase cursor-pointer">Atrás</button>
+                        <button type="submit" ${authLoading ? 'disabled' : ''} class="flex-1 py-3 bg-[#FFCC00] text-[#000533] font-black uppercase text-xs rounded-xl hover:bg-yellow-400 cursor-pointer">
                           ${authLoading ? 'Activando...' : 'Completar Activación'}
                         </button>
                       </div>
@@ -729,7 +729,7 @@
 
               <div class="pt-2 border-t border-blue-900/60 text-center">
                 <span class="text-[11px] text-blue-300">¿Eres alumno con enlace de sala?</span>
-                <button type="button" id="btn-student-bypass" class="text-[11px] text-[#FFCC00] font-bold underline ml-1 hover:text-white">Acceso directo como alumno</button>
+                <button type="button" id="btn-student-bypass" class="text-[11px] text-[#FFCC00] font-bold underline ml-1 hover:text-white cursor-pointer">Acceso directo como alumno</button>
               </div>
 
             </div>
@@ -747,7 +747,6 @@
         document.getElementById('toggle-pass-login')?.addEventListener('click', () => { showPassword = !showPassword; render(); });
         document.getElementById('toggle-pass-reg')?.addEventListener('click', () => { showPassword = !showPassword; render(); });
 
-        // INICIAR SESIÓN (Validación segura con persistencia directa en el Storage)
         document.getElementById('form-login')?.addEventListener('submit', async (e) => {
           e.preventDefault();
           const email = document.getElementById('login-email').value.trim().toLowerCase();
@@ -762,30 +761,28 @@
             const userSnap = await userRef.get();
 
             if (!userSnap.exists) {
-              throw new Error("El correo electrónico no está registrado en el sistema.");
+              throw new Error("El correo electrónico no está registrado en Firestore.");
             }
 
             const userData = userSnap.data();
             if (userData.password !== pass) {
-              throw new Error("Contraseña incorrecta. Verifícala e intenta de nuevo.");
+              throw new Error("Contraseña incorrecta.");
             }
 
             const deviceId = getOrCreateDeviceId();
             if (userData.deviceIdAutorizado && userData.deviceIdAutorizado !== deviceId) {
-              throw new Error("Acceso denegado: Esta cuenta ya se encuentra vinculada y activa en otra computadora.");
+              throw new Error("Acceso denegado: Cuenta activa en otro equipo.");
             }
 
             if (!userData.deviceIdAutorizado) {
               await userRef.update({ deviceIdAutorizado: deviceId });
             }
 
-            // Establecemos las variables de control antes de recargar o renderizar
             localStorage.setItem('auth_token_jeopardy', email);
             isTeacherAuthenticated = true;
             authLoading = false;
             sound.playCorrect();
             
-            // Forzamos la entrada limpia al panel de configuración
             state.status = 'setup';
             render();
           } catch (err) {
@@ -814,11 +811,11 @@
 
             const subData = subSnap.data();
             if (subData.appAsignada && subData.appAsignada !== "Jeopardy") {
-              throw new Error(`Este código pertenece a "${subData.appAsignada}" y no puede usarse aquí.`);
+              throw new Error(`Este código pertenece a "${subData.appAsignada}".`);
             }
 
             if (subData.usado || !subData.activo || subData.usadoPor) {
-              throw new Error("Este código de activación ya fue utilizado o se encuentra inactivo.");
+              throw new Error("Este código ya fue utilizado o está inactivo.");
             }
 
             verifiedLicenseData = { id: subSnap.id, ...subData };
@@ -828,7 +825,7 @@
             render();
           } catch (err) {
             authLoading = false;
-            authErrorMsg = err.message || "Error al verificar el código.";
+            authErrorMsg = err.message || "Error al verificar código.";
             sound.playWrong();
             render();
           }
@@ -848,7 +845,7 @@
             const userSnap = await userRef.get();
 
             if (userSnap.exists) {
-              throw new Error("Este correo electrónico ya se encuentra registrado.");
+              throw new Error("El correo ya está registrado.");
             }
 
             const deviceId = getOrCreateDeviceId();
@@ -879,7 +876,7 @@
             render();
           } catch (err) {
             authLoading = false;
-            authErrorMsg = err.message || "Error al completar el registro.";
+            authErrorMsg = err.message || "Error al registrar.";
             sound.playWrong();
             render();
           }
@@ -892,7 +889,6 @@
         });
       }
 
-      // 1. PANTALLA DE CONFIGURACIÓN
       function renderSetupScreen(container) {
         const teamCount = state.teamCount || state.teams.length;
         const maxMembers = state.maxMembersPerTeam || 5;
@@ -901,7 +897,7 @@
           <div class="min-h-screen flex flex-col bg-[#000533] p-4">
             <header class="flex justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4 mb-4">
               <h1 class="text-lg font-black text-white uppercase font-cinzel">Configuración del Torneo Jeopardy</h1>
-              <button id="btn-logout-setup" class="px-3.5 py-1.5 rounded-xl bg-rose-600 font-bold text-xs uppercase hover:bg-rose-500">Cerrar Sesión Global</button>
+              <button id="btn-logout-setup" class="px-3.5 py-1.5 rounded-xl bg-rose-600 font-bold text-xs uppercase hover:bg-rose-500 cursor-pointer">Cerrar Sesión Global</button>
             </header>
 
             <main class="max-w-4xl mx-auto w-full space-y-4">
@@ -915,7 +911,7 @@
                   <label class="block font-black text-xs uppercase text-[#FFCC00] mb-2 font-cinzel">2. Número de Equipos</label>
                   <div class="grid grid-cols-5 gap-2">
                     ${[1, 2, 3, 4, 5].map(n => `
-                      <button type="button" data-count="${n}" class="team-count-btn py-2.5 rounded-xl font-black text-sm border-2 ${
+                      <button type="button" data-count="${n}" class="team-count-btn py-2.5 rounded-xl font-black text-sm border-2 cursor-pointer ${
                         teamCount === n ? 'bg-[#FFCC00] text-[#000533] border-white' : 'bg-blue-950 text-blue-200 border-blue-800'
                       }">${n}${n === 1 ? 'Equipo' : 'Equipos'}</button>
                     `).join('')}
@@ -934,13 +930,13 @@
               <div class="bg-[#000842] border-2 border-blue-900 rounded-2xl p-4">
                 <div class="flex justify-between items-center mb-2">
                   <label class="block font-black text-xs uppercase text-[#FFCC00] font-cinzel">3. Banco de Preguntas y Respuestas (CSV / Excel)</label>
-                  <button id="btn-download-sample" class="text-xs font-bold text-[#FFCC00] hover:underline flex items-center gap-1">
+                  <button id="btn-download-sample" class="text-xs font-bold text-[#FFCC00] hover:underline flex items-center gap-1 cursor-pointer">
                     📥 Descargar plantilla CSV de muestra
                   </button>
                 </div>
                 <div class="flex flex-col sm:flex-row items-center gap-3">
                   <input id="csv-file-input" type="file" accept=".csv,text/csv" class="hidden" />
-                  <button id="btn-trigger-upload" class="w-full sm:w-auto px-5 py-3 bg-blue-900 hover:bg-blue-800 border-2 border-blue-500 rounded-xl font-bold text-xs uppercase flex items-center justify-center gap-2">
+                  <button id="btn-trigger-upload" class="w-full sm:w-auto px-5 py-3 bg-blue-900 hover:bg-blue-800 border-2 border-blue-500 rounded-xl font-bold text-xs uppercase flex items-center justify-center gap-2 cursor-pointer">
                     📁 Subir archivo CSV con preguntas
                   </button>
                   <span class="text-xs text-blue-300 font-medium">Categorías actuales: <strong>${state.categories.length}</strong></span>
@@ -967,8 +963,8 @@
               </div>
 
               <div class="grid grid-cols-2 gap-3 pt-2">
-                <button id="btn-goto-qr" class="py-3.5 bg-blue-900 border-2 border-blue-600 rounded-xl font-black text-xs uppercase hover:bg-blue-800">Proyectar QR en Pantalla Completa ⛶</button>
-                <button id="btn-start-game" class="py-3.5 bg-[#FFCC00] text-[#000533] rounded-xl font-black text-xs uppercase hover:bg-yellow-400">Comenzar Tablero ▶</button>
+                <button id="btn-goto-qr" class="py-3.5 bg-blue-900 border-2 border-blue-600 rounded-xl font-black text-xs uppercase hover:bg-blue-800 cursor-pointer">Proyectar QR en Pantalla Completa ⛶</button>
+                <button id="btn-start-game" class="py-3.5 bg-[#FFCC00] text-[#000533] rounded-xl font-black text-xs uppercase hover:bg-yellow-400 cursor-pointer">Comenzar Tablero ▶</button>
               </div>
             </main>
           </div>
@@ -1017,7 +1013,6 @@
         });
       }
 
-      // 2. PANTALLA COMPLETA DE CÓDIGOS QR
       function renderQRCodesScreen(container) {
         const teamCount = state.teamCount || state.teams.length;
         const activeTeams = state.teams.slice(0, teamCount);
@@ -1027,8 +1022,8 @@
             <header class="flex justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4">
               <h1 class="text-lg font-black text-white uppercase font-cinzel">Escanear para Unirse al Concurso</h1>
               <div class="flex gap-2">
-                <button id="btn-back-setup" class="px-3 py-1.5 bg-blue-900 rounded-xl text-xs font-bold uppercase hover:bg-blue-800">Configuración</button>
-                <button id="btn-logout-qr" class="px-3 py-1.5 bg-rose-600 rounded-xl text-xs font-bold uppercase hover:bg-rose-500">Cerrar Sesión</button>
+                <button id="btn-back-setup" class="px-3 py-1.5 bg-blue-900 rounded-xl text-xs font-bold uppercase hover:bg-blue-800 cursor-pointer">Configuración</button>
+                <button id="btn-logout-qr" class="px-3 py-1.5 bg-rose-600 rounded-xl text-xs font-bold uppercase hover:bg-rose-500 cursor-pointer">Cerrar Sesión</button>
               </div>
             </header>
 
@@ -1047,7 +1042,7 @@
 
             <div class="flex justify-between items-center pt-3 border-t border-blue-900">
               <span class="text-xs font-bold text-blue-200">Total Conectados: <strong id="qr-total-connected-count">0</strong></span>
-              <button id="btn-start-game-qr" class="px-8 py-3 bg-[#FFCC00] text-[#000533] rounded-2xl font-black text-sm uppercase hover:bg-yellow-400">Iniciar Tablero 🚀</button>
+              <button id="btn-start-game-qr" class="px-8 py-3 bg-[#FFCC00] text-[#000533] rounded-2xl font-black text-sm uppercase hover:bg-yellow-400 cursor-pointer">Iniciar Tablero 🚀</button>
             </div>
           </div>
         `;
@@ -1069,7 +1064,6 @@
         });
       }
 
-      // 3. TABLERO DE JUEGO Y MODAL CON PANTALLA INTERMEDIA DE CARGANDO DISPOSITIVOS
       function renderGameScreen(container) {
         const teamCount = state.teamCount || state.teams.length;
         const activeTeams = state.teams.slice(0, teamCount);
@@ -1091,11 +1085,11 @@
               </div>
 
               <div class="flex items-center gap-2">
-                <button id="btn-finish-game" class="px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase hover:bg-emerald-500 shadow">Terminar Juego 🏆</button>
-                <button id="btn-view-qrcodes" class="px-3 py-1.5 rounded-xl bg-amber-500 text-black font-black text-xs uppercase hover:bg-amber-400">Ver QR</button>
-                <button id="btn-game-setup" class="px-3 py-1.5 rounded-xl bg-blue-900 text-blue-200 font-bold text-xs uppercase border border-blue-700 hover:bg-blue-800">Configuración</button>
-                <button id="btn-game-reset" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-200 font-bold text-xs uppercase border border-slate-600 hover:bg-slate-700">Reiniciar</button>
-                <button id="btn-game-logout" class="px-3 py-1.5 rounded-xl bg-rose-600 text-white font-black text-xs uppercase hover:bg-rose-500">Cerrar Sesión</button>
+                <button id="btn-finish-game" class="px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-black text-xs uppercase hover:bg-emerald-500 shadow cursor-pointer">Terminar Juego 🏆</button>
+                <button id="btn-view-qrcodes" class="px-3 py-1.5 rounded-xl bg-amber-500 text-black font-black text-xs uppercase hover:bg-amber-400 cursor-pointer">Ver QR</button>
+                <button id="btn-game-setup" class="px-3 py-1.5 rounded-xl bg-blue-900 text-blue-200 font-bold text-xs uppercase border border-blue-700 hover:bg-blue-800 cursor-pointer">Configuración</button>
+                <button id="btn-game-reset" class="px-3 py-1.5 rounded-xl bg-slate-800 text-slate-200 font-bold text-xs uppercase border border-slate-600 hover:bg-slate-700 cursor-pointer">Reiniciar</button>
+                <button id="btn-game-logout" class="px-3 py-1.5 rounded-xl bg-rose-600 text-white font-black text-xs uppercase hover:bg-rose-500 cursor-pointer">Cerrar Sesión</button>
               </div>
             </header>
 
@@ -1122,7 +1116,6 @@
               </div>
             </main>
 
-            <!-- MODAL DE PREGUNTA / PANTALLA INTERMEDIA -->
             ${state.activeClue ? `
               <div class="fixed inset-0 bg-[#000533]/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 animate-clue-zoom">
                 <div class="max-w-4xl w-full bg-[#000842] border-4 border-[#FFCC00] rounded-3xl p-8 shadow-[0_0_80px_rgba(255,204,0,0.4)] flex flex-col items-center text-center relative space-y-6 min-h-[460px] justify-between">
@@ -1131,7 +1124,6 @@
                     <span class="font-cinzel text-lg font-black text-[#FFCC00] uppercase">${state.activeClue.categoryTitle}</span>                     <span class="font-bebas text-4xl text-[#FFCC00]">$${state.activeClue.value}</span>
                   </div>
 
-                  <!-- PANTALLA 1: CARGANDO DISPOSITIVOS (OBLIGATORIA ANTES DE LA PREGUNTA) -->
                   ${state.loadingDevicesState ? `
                     <div class="my-auto flex flex-col items-center justify-center space-y-6">
                       <div class="w-16 h-16 border-4 border-[#FFCC00] border-t-transparent rounded-full animate-spin"></div>
@@ -1148,12 +1140,11 @@
                       <button id="btn-deploy-question" class="px-8 py-4 bg-[#FFCC00] hover:bg-yellow-400 text-[#000533] rounded-2xl font-black text-base uppercase shadow-xl cursor-pointer">
                         Desplegar Pregunta 🚀
                       </button>
-                      <button id="btn-cancel-clue" class="px-6 py-4 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase">
+                      <button id="btn-cancel-clue" class="px-6 py-4 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase cursor-pointer">
                         Cancelar Pregunta
                       </button>
                     </div>
                   ` : `
-                    <!-- PANTALLA 2: PREGUNTA REVELADA Y COMPETENCIA DE TIMBRES -->
                     <div class="my-auto">
                       <p class="text-3xl sm:text-5xl font-black text-white leading-relaxed">
                         "${state.activeClue.question}"
@@ -1196,14 +1187,13 @@
                       </div>
                     ` : ''}
 
-                    <!-- BOTONES DE CONTROL DEL PRESENTADOR -->
                     <div class="flex flex-wrap items-center justify-center gap-4 w-full pt-4">
                       ${state.currentTurn ? `
-                        <button id="btn-mark-correct" class="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm uppercase shadow">
-                          ✓ Correcto (+$${state.activeClue.value})                         </button>                         <button id="btn-mark-wrong" class="px-6 py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-sm uppercase shadow">                           ✗ Incorrecto (-$${state.activeClue.value}) y Pasar Turno
+                        <button id="btn-mark-correct" class="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-black text-sm uppercase shadow cursor-pointer">
+                          ✓ Correcto (+$${state.activeClue.value})                         </button>                         <button id="btn-mark-wrong" class="px-6 py-3.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-black text-sm uppercase shadow cursor-pointer">                           ✗ Incorrecto (-$${state.activeClue.value}) y Pasar Turno
                         </button>
                       ` : ''}
-                      <button id="btn-cancel-clue" class="px-6 py-3.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase">
+                      <button id="btn-cancel-clue" class="px-6 py-3.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl font-bold text-sm uppercase cursor-pointer">
                         Cerrar Pregunta
                       </button>
                     </div>
@@ -1240,7 +1230,6 @@
         }
       }
 
-      // 4. PANTALLA DE PODIUM DE EQUIPOS GANADORES
       function renderPodiumTeamsScreen(container) {
         const activeTeams = [...state.teams.slice(0, state.teamCount)].sort((a, b) => b.score - a.score);
         const winner = activeTeams[0];
@@ -1250,7 +1239,7 @@
           <div class="min-h-screen bg-[#000533] p-6 flex flex-col justify-between items-center text-center">
             <header class="w-full max-w-4xl flex justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4">
               <h1 class="text-xl font-black text-[#FFCC00] uppercase font-cinzel">🏆 PODIUM DE EQUIPOS GANADORES 🏆</h1>
-              <button id="btn-logout-podium-teams" class="px-3.5 py-1.5 bg-rose-600 rounded-xl text-xs font-bold uppercase hover:bg-rose-500">Cerrar Sesión</button>
+              <button id="btn-logout-podium-teams" class="px-3.5 py-1.5 bg-rose-600 rounded-xl text-xs font-bold uppercase hover:bg-rose-500 cursor-pointer">Cerrar Sesión</button>
             </header>
 
             <main class="my-auto max-w-4xl w-full space-y-6">
@@ -1271,7 +1260,7 @@
             </main>
 
             <footer class="w-full max-w-4xl flex justify-end">
-              <button id="btn-next-podium" class="px-8 py-3.5 bg-[#FFCC00] text-[#000533] rounded-2xl font-black text-base uppercase hover:bg-yellow-400 shadow-lg">
+              <button id="btn-next-podium" class="px-8 py-3.5 bg-[#FFCC00] text-[#000533] rounded-2xl font-black text-base uppercase hover:bg-yellow-400 shadow-lg cursor-pointer">
                 Siguiente (Podium Individual) ▶
               </button>
             </footer>
@@ -1286,7 +1275,6 @@
         });
       }
 
-      // 5. PANTALLA DE PODIUM DE INDIVIDUALES (TRES PRIMEROS LUGARES GENERALES)
       function renderPodiumIndividualsScreen(container) {
         let allPlayers = [];
         state.teams.slice(0, state.teamCount).forEach(team => {
@@ -1311,7 +1299,7 @@
           <div class="min-h-screen bg-[#000533] p-6 flex flex-col justify-between items-center text-center">
             <header class="w-full max-w-4xl flex justify-between items-center bg-[#000222] border-2 border-[#D4AF37] rounded-2xl p-4">
               <h1 class="text-xl font-black text-[#FFCC00] uppercase font-cinzel">🌟 TRES PRIMEROS LUGARES GENERALES 🌟</h1>
-              <button id="btn-logout-podium-ind" class="px-3.5 py-1.5 bg-rose-600 rounded-xl text-xs font-bold uppercase hover:bg-rose-500">Cerrar Sesión</button>
+              <button id="btn-logout-podium-ind" class="px-3.5 py-1.5 bg-rose-600 rounded-xl text-xs font-bold uppercase hover:bg-rose-500 cursor-pointer">Cerrar Sesión</button>
             </header>
 
             <main class="my-auto max-w-4xl w-full space-y-4">
@@ -1334,7 +1322,7 @@
             </main>
 
             <footer class="w-full max-w-4xl flex justify-center pt-2">
-              <button id="btn-final-logout" class="px-8 py-3.5 bg-rose-600 text-white rounded-2xl font-black text-sm uppercase hover:bg-rose-500 shadow-lg">
+              <button id="btn-final-logout" class="px-8 py-3.5 bg-rose-600 text-white rounded-2xl font-black text-sm uppercase hover:bg-rose-500 shadow-lg cursor-pointer">
                 Cerrar Sesión Global y Finalizar ⏻
               </button>
             </footer>
@@ -1345,7 +1333,6 @@
         document.getElementById('btn-final-logout').addEventListener('click', executeGlobalLogout);
       }
 
-      // 6. VISTA MÓVIL DEL PARTICIPANTE
       function renderPlayerView(container) {
         let myTeamId = assignedTeamId || localStorage.getItem('jeopardy_player_team') || 'azul';
         let myName = localStorage.getItem('jeopardy_player_name') || '';
@@ -1366,7 +1353,7 @@
                     <label class="block text-xs font-bold text-blue-200 mb-1">Tu Nombre:</label>
                     <input id="mobile-name" type="text" required placeholder="Escribe tu nombre..." class="w-full p-3.5 rounded-xl bg-[#000324] border-2 border-blue-500 text-white font-bold" />
                   </div>
-                  <button type="submit" class="w-full py-3.5 bg-[#FFCC00] text-[#000533] font-black uppercase rounded-xl hover:bg-yellow-400">Entrar al Juego</button>
+                  <button type="submit" class="w-full py-3.5 bg-[#FFCC00] text-[#000533] font-black uppercase rounded-xl hover:bg-yellow-400 cursor-pointer">Entrar al Juego</button>
                 </form>
               </div>
             </div>
@@ -1398,7 +1385,7 @@
               <div class="w-20 h-20 rounded-2xl bg-[#060CE9] border-2 border-[#FFCC00] flex items-center justify-center font-cinzel text-4xl font-black text-[#FFCC00] shadow-lg">🏆</div>
               <h2 class="text-2xl font-black text-[#FFCC00] uppercase font-cinzel">¡Juego Finalizado!</h2>
               <p class="text-sm text-blue-200">Consulta los resultados y podium en la pantalla principal del profesor.</p>
-              <button onclick="localStorage.clear();location.reload();" class="mt-6 px-6 py-3 bg-blue-900 border border-blue-500 rounded-xl text-xs font-bold uppercase text-white">Salir de la Sesión</button>
+              <button onclick="localStorage.clear();location.reload();" class="mt-6 px-6 py-3 bg-blue-900 border border-blue-500 rounded-xl text-xs font-bold uppercase text-white cursor-pointer">Salir de la Sesión</button>
             </div>
           `;
           return;
@@ -1439,7 +1426,7 @@
               <button
                 id="mobile-buzzer-btn"
                 ${!isBuzzerOpen ? 'disabled' : ''}
-                class="w-64 h-64 rounded-full ${isBuzzerOpen ? 'buzzer-dome-red border-4 border-yellow-300 active:scale-95' : 'buzzer-disabled border-4 border-slate-700'} font-cinzel font-black text-3xl uppercase text-white shadow-2xl flex flex-col items-center justify-center transition-all"
+                class="w-64 h-64 rounded-full ${isBuzzerOpen ? 'buzzer-dome-red border-4 border-yellow-300 active:scale-95' : 'buzzer-disabled border-4 border-slate-700'} font-cinzel font-black text-3xl uppercase text-white shadow-2xl flex flex-col items-center justify-center transition-all cursor-pointer"
               >
                 <span class="text-4xl mb-1">${isBuzzerOpen ? '⚡' : '🔒'}</span>
                 <span>PULSAR</span>
@@ -1447,7 +1434,7 @@
             </div>
 
             <div class="pb-4">
-              <button onclick="localStorage.clear();location.reload();" class="text-xs text-blue-400 underline">
+              <button onclick="localStorage.clear();location.reload();" class="text-xs text-blue-400 underline cursor-pointer">
                 Cambiar de nombre o equipo
               </button>
             </div>
